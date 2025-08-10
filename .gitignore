@@ -1,2 +1,5 @@
 /target
 Cargo.lock
+test.md
+test_output
+test_rune_files

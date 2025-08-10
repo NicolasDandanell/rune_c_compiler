@@ -7,7 +7,7 @@ mod utilities;
 use clap::Parser;
 use crate::{ utilities::CConfigurations, header::output_header, parser::output_parser, runic_definitions::output_runic_definitions, source::output_source };
 use rune_parser::{ parser_rune_files, RuneFileDescription };
-use std::path::Path;
+use std::{ fs::create_dir, path::Path };
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -63,15 +63,12 @@ fn main() -> Result<(), usize> {
     // Validate arguments
     // ———————————————————
 
-    // Output folder
-    if !output_path.exists() || !output_path.is_dir() {
-        if !output_path.exists() {
-            println!("Output path \"{0}\" does not exist!", output_path.as_os_str().to_str().unwrap());
-        } else if !input_path.is_dir() {
-            println!("Output path \"{0}\" is not a directory!", output_path.as_os_str().to_str().unwrap());
+    // If output folder does exist, create it
+    if !output_path.is_dir() {
+        match create_dir(output_path) {
+            Err(error) => panic!("Cannot create directory {0:?}. Got error {1}", output_path, error),
+            Ok(()) => ()
         }
-
-        return Err(2)
     }
 
     let definitions_list = match parser_rune_files(input_path) {
