@@ -113,11 +113,11 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("// ———————————————————"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define FIELD_INDEX_BITS      0x1F"));
-    definitions_file.add_line(format!("#define NO_VERIFICATION_FIELD INT8_MIN"));
-    definitions_file.add_line(format!("#define NO_PARSER             0"));
-    definitions_file.add_line(format!("#define TRANSPORT_TYPE_BITS   0xE0"));
-    definitions_file.add_line(format!("#define VERIFICATION_FIELD    0x1F"));
+    definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS      0x1F"));
+    definitions_file.add_line(format!("#define RUNE_NO_VERIFICATION_FIELD INT8_MIN"));
+    definitions_file.add_line(format!("#define RUNE_NO_PARSER             0"));
+    definitions_file.add_line(format!("#define RUNE_TRANSPORT_TYPE_BITS   0xE0"));
+    definitions_file.add_line(format!("#define RUNE_VERIFICATION_FIELD    0x1F"));
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("// Configuration dependent definitions"));
@@ -140,10 +140,10 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define FIELD_SIZE_TYPE   {0}", type_from_size(configurations.field_size_type_size)));
-    definitions_file.add_line(format!("#define FIELD_OFFSET_TYPE {0}", type_from_size(configurations.field_offset_type_size)));
-    definitions_file.add_line(format!("#define MESSAGE_SIZE_TYPE {0}", type_from_size(configurations.message_size_type_size)));
-    definitions_file.add_line(format!("#define PARSER_INDEX_TYPE {0}", type_from_size(configurations.parser_index_type_size)));
+    definitions_file.add_line(format!("#define RUNE_FIELD_SIZE_TYPE   {0}", type_from_size(configurations.field_size_type_size)));
+    definitions_file.add_line(format!("#define RUNE_FIELD_OFFSET_TYPE {0}", type_from_size(configurations.field_offset_type_size)));
+    definitions_file.add_line(format!("#define RUNE_MESSAGE_SIZE_TYPE {0}", type_from_size(configurations.message_size_type_size)));
+    definitions_file.add_line(format!("#define RUNE_PARSER_INDEX_TYPE {0}", type_from_size(configurations.parser_index_type_size)));
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("// Parsing array definitions"));
@@ -151,7 +151,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("/** First entry of the parser array is purposely empty, as NO_PARSER is the index 0 for quick comparison check */"));
-    definitions_file.add_line(format!("#define PARSER_COUNT {0}", struct_definitions.len() + 1));
+    definitions_file.add_line(format!("#define RUNE_PARSER_COUNT {0}", struct_definitions.len() + 1));
     definitions_file.add_newline();
 
     // Calculate longest struct name for spacing reasons
