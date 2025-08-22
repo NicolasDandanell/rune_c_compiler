@@ -150,8 +150,8 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("// ——————————————————————————"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("/** First entry of the parser array is purposely empty, as NO_PARSER is the index 0 for quick comparison check */"));
-    definitions_file.add_line(format!("#define RUNE_PARSER_COUNT {0}", struct_definitions.len() + 1));
+    definitions_file.add_line(format!("/** Number of struct pointers in the parser array */"));
+    definitions_file.add_line(format!("#define RUNE_PARSER_COUNT {0}", struct_definitions.len()));
     definitions_file.add_newline();
 
     // Calculate longest struct name for spacing reasons
@@ -168,7 +168,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     for i in 0..struct_definitions.len() {
         let struct_name: String = pascal_to_uppercase(&struct_definitions[i].name);
 
-        definitions_file.add_line(format!("#define {0}_INDEX {1}{2}",
+        definitions_file.add_line(format!("#define RUNE_{0}_PARSER_INDEX {1}{2}",
             struct_name,
             spaces(longest_struct_name - struct_name.len()),
             i + 1

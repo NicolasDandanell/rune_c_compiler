@@ -96,7 +96,7 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
         }
 
         let verification_field: String = match has_verification {
-            false => String::from("NO_VERIFICATION_FIELD"),
+            false => String::from("RUNE_NO_VERIFICATION_FIELD"),
             true  => format!("{0}", member_count - 1)
         };
 
@@ -131,8 +131,8 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
             };
 
             let parser_index_string: String = match &index_sorted_members[i].user_definition_link {
-                UserDefinitionLink::StructLink(link) => format!("{0}_INDEX", pascal_to_uppercase(&link.name)),
-                _ => String::from("NO_PARSER")
+                UserDefinitionLink::StructLink(link) => format!("RUNE_{0}_PARSER_INDEX", pascal_to_uppercase(&link.name)),
+                _ => String::from("RUNE_NO_PARSER")
             };
 
             source_file.add_line(format!("        /* {0}{1}: {2}{3}{4} */ {{", init_char, member_name, spaces(spacing), i, verification_string));

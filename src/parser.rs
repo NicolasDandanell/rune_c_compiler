@@ -28,36 +28,24 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: 
     // Inclusions
     // ———————————
 
-    // Create a list of all header files which contain struct definitions, then sort them alphabetically
-    let mut file_list: Vec<String> = Vec::with_capacity(file_descriptions.len());
+    parser_file.add_line(String::from("#include \"rune.h\""));
+    parser_file.add_newline();
 
-    // Include all message headers that include structs
-    for file in file_descriptions {
-        if !file.definitions.structs.is_empty() {
-            file_list.push(pascal_to_snake_case(&file.file_name));
-        }
-    }
+    // External parser definitions
+    // ————————————————————————————
 
-    // Sort list alphabetically
-    file_list.sort_by(|a, b| a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()));
-
-    // Output inclusions to files
-    if !file_list.is_empty() {
-        for file in file_list {
-            parser_file.add_line(format!("#include \"{0}.rune.h\"", file));
+    if !struct_definitions.is_empty() {
+        for i in 0..struct_definitions.len() {
+            parser_file.add_line(format!("extern message_info_t {0}_parser;", pascal_to_snake_case(&struct_definitions[i].name)));
         }
         parser_file.add_newline();
     }
-
-    parser_file.add_line(String::from("#include \"rune.h\""));
-    parser_file.add_newline();
 
     // Parser
     // ———————
 
     // Define parser array
-    parser_file.add_line(String::from("message_info_t* PROTOCOL parser_array[PARSER_COUNT] = {"));
-    parser_file.add_line(String::from("    NULL,"));
+    parser_file.add_line(String::from("static message_info_t* PROTOCOL parser_array[RUNE_PARSER_COUNT] = {"));
 
     for i in 0..struct_definitions.len() {
         let end: String = match i == struct_definitions.len() - 1 {
@@ -69,6 +57,15 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: 
     }
 
     parser_file.add_line(String::from("};"));
+    parser_file.add_newline();
+
+    // Get parser function
+    // ————————————————————
+
+    parser_file.add_line(String::from("/** Get the parser struct of a given message type from its index */"));
+    parser_file.add_line(String::from("inline message_info_t* get_parser(RUNE_PARSER_INDEX_TYPE index) {"));
+    parser_file.add_line(String::from("    return parser_array[index - 1];"));
+    parser_file.add_line(String::from("}"));
 
     parser_file.output_file();
 }
