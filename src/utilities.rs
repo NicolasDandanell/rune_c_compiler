@@ -451,7 +451,7 @@ impl CStructDefinition for StructDefinition {
             };
 
             // Estimate padding if packing disabled, and member does not align to the worst case 8 bytes (64 bit targets)
-            if !configurations.pack && (total_size % member_alignment_size) != 0 {
+            if !configurations.pack_data && (total_size % member_alignment_size) != 0 {
                 // Add padding
                 let padding: usize = member_alignment_size - (total_size % member_alignment_size);
                 total_size += padding;

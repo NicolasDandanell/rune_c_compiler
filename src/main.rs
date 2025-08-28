@@ -22,7 +22,11 @@ struct Args {
 
     /// Whether to pack (remove padding) from outputted sources - Defaults to false
     #[arg(long, short = 'p', default_value = "false")]
-    pack: bool,
+    pack_data: bool,
+
+    /// Whether to pack (remove padding) and size-optimize the outputted parsing metadata - Defaults to false
+    #[arg(long, short = 'm', default_value = "false")]
+    pack_metadata: bool,
 
     /// Whether to store all Rune data in a specific section. By default no section is declared
     #[arg(long, short = 'd')]
@@ -35,8 +39,11 @@ struct Args {
 
 #[derive(Debug, Clone)]
 pub struct CompileConfigurations {
-    /// Whether or not to pack data structures
-    pack: bool,
+    /// Whether or not to pack message data structures
+    pack_data: bool,
+
+    /// Whether or not to pack parsing metadata structures
+    pack_metadata: bool,
 
     /// Whether to declare all rune data in a specific section - Default to None
     section: Option<String>,
@@ -55,9 +62,10 @@ fn main() -> Result<(), usize> {
     let input_path: &Path                     = Path::new(args.rune_folder.as_str());
     let output_path: &Path                    = Path::new(args.output_folder.as_str());
     let configurations: CompileConfigurations = CompileConfigurations {
-        pack:    args.pack,
-        section: args.data_section,
-        sort:    args.sort
+        pack_data:     args.pack_data,
+        pack_metadata: args.pack_metadata,
+        section:       args.data_section,
+        sort:          args.sort
     };
 
     // Validate arguments
