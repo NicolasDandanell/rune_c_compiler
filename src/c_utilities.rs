@@ -1,6 +1,5 @@
 use crate::CompileConfigurations;
 use rune_parser::{ types::{ ArraySize, DefineValue, FieldSlot, FieldType, StructDefinition, StructMember, UserDefinitionLink }, RuneFileDescription };
-use std::{ fs::{ File, remove_file }, io::Write, path::Path };
 
 // String helper functions
 // ————————————————————————
@@ -465,60 +464,5 @@ impl CStructDefinition for StructDefinition {
         // println!("   = Estimated total - {0} bytes\n", total_size);
 
         total_size
-    }
-}
-
-// Output file declaration
-// ————————————————————————
-
-pub struct OutputFile {
-    file_name: String,
-    string_buffer: String
-}
-
-impl OutputFile {
-    pub fn new(file_name: String) -> OutputFile {
-
-        // Create string buffer
-        let string_buffer: String = String::with_capacity(0x2000);
-
-        OutputFile {
-            file_name,
-            string_buffer
-        }
-    }
-
-    pub fn add_line(&mut self, string: String) {
-        self.string_buffer.push_str(format!("{0}\n", string).as_str());
-    }
-
-    pub fn add_newline(&mut self) {
-        self.string_buffer.push_str("\n");
-    }
-
-    pub fn output_file(&self) {
-
-        let output_file_path: &Path = Path::new(&self.file_name);
-
-        // Check if file already exists
-        if output_file_path.exists() {
-            match remove_file(output_file_path) {
-                Err(error) => panic!("Could not delete existing {0} file. Got error {1}", output_file_path.to_str().unwrap(), error),
-                Ok(_) => ()
-            }
-        }
-
-        let mut output_file: File = match File::create(output_file_path) {
-            Err(error) => panic!("Could not create output file \"{0}\". Got error {1}", output_file_path.to_str().unwrap(), error),
-            Ok(file_result) => file_result
-        };
-
-        match output_file.write(self.string_buffer.as_bytes()) {
-            Err(error) => panic!("Could not write to \"{0}\" file. Got error {1}", self.file_name, error),
-            Ok(_) => match output_file.flush() {
-                Err(error) => panic!("Could not flush to \"{0}\" file. Got error {1}", self.file_name, error),
-                Ok(_) => ()
-            }
-         }
     }
 }

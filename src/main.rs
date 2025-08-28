@@ -1,11 +1,12 @@
+mod c_utilities;
 mod header;
+mod output_file;
 mod parser;
 mod runic_definitions;
 mod source;
-mod utilities;
 
 use clap::Parser;
-use crate::{ utilities::CConfigurations, header::output_header, parser::output_parser, runic_definitions::output_runic_definitions, source::output_source };
+use crate::{ c_utilities::CConfigurations, header::output_header, parser::output_parser, runic_definitions::output_runic_definitions, source::output_source };
 use rune_parser::{ parser_rune_files, RuneFileDescription };
 use std::{ fs::create_dir, path::Path };
 
@@ -14,7 +15,7 @@ use std::{ fs::create_dir, path::Path };
 struct Args {
     /// Path of folder where to find Rune files
     #[arg(long, short = 'i')]
-    rune_folder: String,
+    input_folder: String,
 
     /// Path of folder where to output source code
     #[arg(long, short = 'o')]
@@ -59,7 +60,7 @@ fn main() -> Result<(), usize> {
 
     let args: Args = Args::parse();
 
-    let input_path: &Path                     = Path::new(args.rune_folder.as_str());
+    let input_path: &Path                     = Path::new(args.input_folder.as_str());
     let output_path: &Path                    = Path::new(args.output_folder.as_str());
     let configurations: CompileConfigurations = CompileConfigurations {
         pack_data:     args.pack_data,
@@ -103,7 +104,7 @@ pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: 
     // Create source and header files matching the Rune files
     println!("Outputting headers and sources for:");
     for file in &file_descriptions {
-        println!("    {0}.rune", file.file_name);
+        println!("    {0}{1}.rune", file.relative_path, file.file_name);
 
         // Create header file
         output_header(&file, output_path);

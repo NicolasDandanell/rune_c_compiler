@@ -1,4 +1,5 @@
-use crate::utilities::{ pascal_to_uppercase, spaces, CConfigurations, OutputFile };
+use crate::c_utilities::{ pascal_to_uppercase, spaces, CConfigurations };
+use crate::output_file::OutputFile;
 use rune_parser::{ RuneFileDescription, types::StructDefinition };
 use std::path::Path;
 
@@ -13,8 +14,6 @@ fn type_from_size(size: usize) -> String {
 }
 
 pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) {
-    let definitions_file_string: String = format!("{0}/runic_definitions.h", output_path.to_str().unwrap());
-
     let mut bitfield_attributes: String = String::with_capacity(0x100);
     let     enum_attributes:     String = String::with_capacity(0x100);
     let mut parser_attributes:   String = String::with_capacity(0x100);
@@ -110,7 +109,9 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     struct_definitions.sort_by(|a, b| a.name.to_ascii_uppercase().cmp(&b.name.to_ascii_uppercase()));
 
     // Create output file
-    let mut definitions_file: OutputFile = OutputFile::new(definitions_file_string);
+    let definitions_file_string: String = String::from("runic_definitions.h");
+
+    let mut definitions_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), definitions_file_string);
 
     // Disclaimers
     // ————————————

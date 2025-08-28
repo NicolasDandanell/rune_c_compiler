@@ -1,11 +1,12 @@
-use crate::utilities::{ pascal_to_snake_case, OutputFile };
+use crate::c_utilities::pascal_to_snake_case;
+use crate::output_file::OutputFile;
 use rune_parser::{ types::StructDefinition, RuneFileDescription };
 use std::path::Path;
 
 pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: &Path) {
     let parser_file_string: String = String::from("runic_parser.c");
 
-    let mut parser_file: OutputFile = OutputFile::new(format!("{0}/{1}", output_path.to_str().unwrap(), parser_file_string));
+    let mut parser_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), parser_file_string);
 
     // Create a list with all declared structs across all files
     let mut struct_definitions: Vec<StructDefinition> = Vec::with_capacity(0x40);

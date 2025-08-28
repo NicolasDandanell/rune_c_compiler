@@ -1,5 +1,6 @@
 use crate::RuneFileDescription;
-use crate::utilities::{ CFieldType, CStructDefinition, OutputFile, pascal_to_snake_case, pascal_to_uppercase, spaces };
+use crate::c_utilities::{ CFieldType, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces };
+use crate::output_file::OutputFile;
 use rune_parser::types::{ BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, StructDefinition, StructMember };
 use std::path::Path;
 
@@ -334,9 +335,14 @@ pub fn output_header(file: &RuneFileDescription, output_path: &Path) {
     //
     // —————————————————————————————————————————————————
 
-    let h_file_string: String = format!("{0}/{1}.rune.h", output_path.to_str().unwrap(), file.file_name);
+    let h_file_string: String = format!("{0}{1}.rune.h",
+        match file.relative_path.is_empty() {
+            true  => String::new(),
+            false => format!("/{0}", file.relative_path)
+        },
+        file.file_name);
 
-    let mut header_file: OutputFile = OutputFile::new(h_file_string);
+    let mut header_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), h_file_string);
 
     // Disclaimers
     // ————————————

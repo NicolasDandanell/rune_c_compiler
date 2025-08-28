@@ -1,5 +1,6 @@
 use crate::RuneFileDescription;
-use crate::utilities::{ CStructMember, OutputFile, pascal_to_snake_case, pascal_to_uppercase, spaces };
+use crate::c_utilities::{ CStructMember, pascal_to_snake_case, pascal_to_uppercase, spaces };
+use crate::output_file::OutputFile;
 use rune_parser::types::{ FieldSlot, FieldType, StructMember, UserDefinitionLink};
 use std::path::Path;
 
@@ -16,9 +17,14 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
     //
     // —————————————————————————————————————————————————
 
-    let c_file_string: String = format!("{0}/{1}.rune.c", output_path.to_str().unwrap(), file.file_name);
+    let c_file_string: String = format!("{0}{1}.rune.c",
+        match file.relative_path.is_empty() {
+            true  => String::new(),
+            false => format!("/{0}", file.relative_path)
+        }, file.file_name
+    );
 
-    let mut source_file: OutputFile = OutputFile::new(c_file_string);
+    let mut source_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), c_file_string);
 
     // Disclaimers
     // ————————————
