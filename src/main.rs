@@ -33,9 +33,9 @@ struct Args {
     #[arg(long, short = 'd')]
     data_section: Option<String>,
 
-    /// Whether to sort struct field placement to optimize alignment - Defaults to true
-    #[arg(long, short = 's', default_value = "true")]
-    sort: bool
+    /// Whether to avoid sorting struct field placement to optimize alignment - Defaults to false
+    #[arg(long, short = 'u', default_value = "false")]
+    unsorted: bool
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ fn main() -> Result<(), usize> {
         pack_data:     args.pack_data,
         pack_metadata: args.pack_metadata,
         section:       args.data_section,
-        sort:          args.sort
+        sort:          !args.unsorted
     };
 
     // Validate arguments
