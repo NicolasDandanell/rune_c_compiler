@@ -1,7 +1,7 @@
 use crate::RuneFileDescription;
 use crate::c_utilities::{ CFieldType, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces };
 use crate::output_file::OutputFile;
-use rune_parser::types::{ BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, StructDefinition, StructMember };
+use rune_parser::types::{ BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, EnumValue, StructDefinition, StructMember };
 use std::path::Path;
 
 /// Outputs a bitfield definition into the header file
@@ -194,6 +194,8 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
         }
     }
 
+    let mut initializer_value: String = String::from("0");
+
     // Print all enum members
     for i in 0..enum_definition.members.len() {
 
@@ -206,6 +208,16 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
         }
 
         let member_name: String = pascal_to_uppercase(&enum_member.ident);
+
+        let is_zero: bool = match enum_member.value {
+            EnumValue::IntegerLiteral(value) => value == 0,
+            EnumValue::FloatLiteral(value)   => value == 0.0,
+        };
+
+        if is_zero && (initializer_value == "0") {
+            initializer_value = member_name.clone();
+        }
+
         let ending: String = match i == enum_definition.members.len() - 1 {
             false => String::from(","),
             true  => String::from("")
@@ -214,7 +226,12 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
         header_file.add_line(format!("    {0}{1} = {2}{3}", member_name, spaces(longest_member_name - member_name.len()), enum_member.value.to_string(), ending));
     }
 
+    // Output enum definitions
     header_file.add_line(format!("}} {0}_t;", enum_name));
+    header_file.add_newline();
+
+    // Output enum initializer value
+    header_file.add_line(format!("#define {0}_INIT {1}", pascal_to_uppercase(&enum_name), initializer_value));
     header_file.add_newline();
 }
 
@@ -411,15 +428,12 @@ pub fn output_header(file: &RuneFileDescription, output_path: &Path) {
     // Structs
     // ————————
 
-    if !file.definitions.structs.is_empty() {
+    // Print out structs
+    for struct_definition in &file.definitions.structs {
+        output_struct(&mut header_file, &struct_definition);
 
-        // Print out structs
-        for struct_definition in &file.definitions.structs {
-            output_struct(&mut header_file, &struct_definition);
-
-            // Add struct initializer
-            output_struct_initializer(&mut header_file, &struct_definition)
-        }
+        // Add struct initializer
+        output_struct_initializer(&mut header_file, &struct_definition)
     }
 
     // End & C++ guards
