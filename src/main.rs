@@ -72,6 +72,11 @@ fn main() -> Result<(), usize> {
     // Validate arguments
     // ———————————————————
 
+    // If input folder does not exist, return an error
+    if !input_path.exists() {
+        panic!("Input path invalid!");
+    }
+
     // If output folder does exist, create it
     if !output_path.is_dir() {
         match create_dir(output_path) {
@@ -80,7 +85,7 @@ fn main() -> Result<(), usize> {
         }
     }
 
-    let definitions_list = match parser_rune_files(input_path) {
+    let definitions_list: Vec<RuneFileDescription> = match parser_rune_files(input_path) {
         Ok(value) => value,
         Err(error)         => panic!("Could not parser Rune files! Got error {0:?}", error)
     };
