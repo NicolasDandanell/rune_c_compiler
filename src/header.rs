@@ -1,7 +1,7 @@
 use crate::RuneFileDescription;
 use crate::c_utilities::{ CFieldType, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces };
 use crate::output_file::OutputFile;
-use rune_parser::types::{ BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, EnumValue, StructDefinition, StructMember };
+use rune_parser::types::{ BitfieldDefinition, BitfieldMember, BitSize, DefineDefinition, DefineValue, EnumDefinition, EnumValue, FieldType, StructDefinition, StructMember };
 use std::path::Path;
 
 /// Outputs a bitfield definition into the header file
@@ -17,22 +17,39 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
     let mut little_endian_order: Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
     let mut big_endian_order:    Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
 
+    // Get the backing type with signed and unsigned variants
+    let backing_type: (FieldType, FieldType) = match bitfield_definition.backing_type {
+        FieldType::Byte  | FieldType::UByte  => (FieldType::UByte, FieldType::Byte),
+        FieldType::Short | FieldType::UShort => (FieldType::UShort, FieldType::Short),
+        FieldType::Int   | FieldType::UInt   => (FieldType::UInt, FieldType::Int),
+        FieldType::Long  | FieldType::Long   => (FieldType::ULong, FieldType::Long),
+        _ => unreachable!("Only integer type primitives can back bitfields")
+    };
+
     // Calculate required padding for ensuring proper alignment
     let mut total_size: usize = 0;
 
     for member in &bitfield_definition.members {
-        total_size += member.bit_size;
+        total_size += match member.bit_size {
+            BitSize::Signed(size)   => size,
+            BitSize::Unsigned(size) => size
+        };
     }
 
     let padding: BitfieldMember = BitfieldMember {
         ident:    String::from("padding"),
-        bit_size: (bitfield_definition.backing_type.primitive_c_size() * 8) - total_size,
+        bit_size: BitSize::Unsigned((bitfield_definition.backing_type.primitive_c_size() * 8) - total_size),
         bit_slot: 0, // Does not matter
         comment:  Some(String::from(" Padding to ensure proper alignment "))
     };
 
+    let padding_name_size: usize = match padding.bit_size {
+        BitSize::Signed(size)   => size,
+        BitSize::Unsigned(size) => size
+    };
+
     // Calculate longest member name for spacing
-    let mut longest_name: usize = match padding.bit_size {
+    let mut longest_name: usize = match padding_name_size {
         0 => 0,
         _ => String::from("padding").len()
     };
@@ -83,11 +100,26 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
 
         let member_name = pascal_to_snake_case(&member.1.ident);
 
+        // Get bit size
+        let bit_size:       usize;
+        let backing_string: String;
+
+        match member.1.bit_size {
+            BitSize::Signed(size) => {
+                backing_string = format!("{0} ", backing_type.1.to_c_type());
+                bit_size = size;
+            },
+            BitSize::Unsigned(size) => {
+                backing_string = backing_type.0.to_c_type();
+                bit_size = size;
+            }
+        };
+
         header_file.add_line(format!("    {0} {1}{2} : {3};",
-            bitfield_definition.backing_type.to_c_type(),
+            backing_string,
             member_name,
             spaces(longest_name - member_name.len()),
-            member.1.bit_size
+            bit_size
         ));
     }
 
@@ -128,11 +160,26 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
 
         let member_name: String = pascal_to_snake_case(&member.1.ident);
 
+        // Get bit size
+        let bit_size:       usize;
+        let backing_string: String;
+
+        match member.1.bit_size {
+            BitSize::Signed(size) => {
+                backing_string = format!("{0} ", backing_type.1.to_c_type());
+                bit_size = size;
+            },
+            BitSize::Unsigned(size) => {
+                backing_string = backing_type.0.to_c_type();
+                bit_size = size;
+            }
+        };
+
         header_file.add_line(format!("    {0} {1}{2} : {3};",
-            bitfield_definition.backing_type.to_c_type(),
+            backing_string,
             member_name,
             spaces(longest_name - member_name.len()),
-            member.1.bit_size
+            bit_size
         ));
     }
 
