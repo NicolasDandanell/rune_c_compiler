@@ -75,13 +75,15 @@ jobs:
               echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
             fi
         # Needs Github Token set up            
-        # - name: Upload the binaries
-        #   uses: softprops/action-gh-release@v1
-        #   with:
-        #     files: |
-        #       ${{ env.ASSET }}
+        - name: Upload the binaries
+          uses: softprops/action-gh-release@v2
+          with:
+            files: |
+              ${{ env.ASSET }}
+        
         - name: Upload Artifacts
           uses: actions/upload-artifact@v4
           with:
             name: ${{ env.ASSET }}
+
             path: ${{ env.ASSET }}
