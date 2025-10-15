@@ -59,17 +59,17 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
         let mut has_verification: bool = false;
 
         for member in &struct_definition.members {
-            match member.field_slot {
-                FieldSlot::VerificationField       => has_verification = true,
-                FieldSlot::NamedSlot(index) => {
-                    if index as usize > highest_index {
-                        highest_index = index as usize;
-                    }
-                }
+            let index: usize = match member.field_slot {
+                FieldSlot::VerificationField       => { has_verification = true; 0 },
+                FieldSlot::NamedSlot(value) => value
+            };
+
+            if index > highest_index {
+                highest_index = index;
             }
         }
 
-        let member_count: usize = (highest_index + 1) + (has_verification as usize);
+        let member_count: usize = highest_index + 1;
 
         // Index sort all members, adding empty definitions for skipped fields
         let mut index_sorted_members: Vec<StructMember> = Vec::with_capacity(member_count);
@@ -86,7 +86,7 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
             for listed_member in &struct_definition.members {
                 let listed_index: usize = match listed_member.field_slot {
                     FieldSlot::NamedSlot(index) => index,
-                    FieldSlot::VerificationField       => highest_index + 1
+                    FieldSlot::VerificationField       => 0
                 };
 
                 if listed_index == i {
@@ -101,17 +101,18 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
             index_sorted_members.push(member);
         }
 
-        let verification_field: String = match has_verification {
-            false => String::from("RUNE_NO_VERIFICATION_FIELD"),
-            true  => format!("{0}", member_count - 1)
-        };
-
         source_file.add_newline();
-        source_file.add_line(format!("message_parser_t RUNIC_PARSER {0}_parser = {{", struct_name));
-        source_file.add_line(format!("    .size               = sizeof({0}_t),", struct_name));
-        source_file.add_line(format!("    .largest_field      = {0},", highest_index));
-        source_file.add_line(format!("    .verification_index = {0},", verification_field));
-        source_file.add_line(format!("    .field_info         = {{"));
+        source_file.add_line(format!("rune_message_parser_t RUNIC_PARSER {0}_parser = {{", struct_name));
+        source_file.add_line(format!("    .size                     = sizeof({0}_t),", struct_name));
+        source_file.add_line(format!("    .parsing_data             = {{"));
+        source_file.add_line(format!("        .largest_field        = {0},", highest_index));
+        source_file.add_line(format!("        .has_verification     = {0},", has_verification));
+        source_file.add_line(format!("        .padding /* Unused */ = 0"));
+        source_file.add_line(format!("    }},"));
+
+        source_file.add_line(format!("    .field_info               = {{"));
+
+
 
         for i in 0..member_count {
             let member_name: String = pascal_to_snake_case(&index_sorted_members[i].ident);

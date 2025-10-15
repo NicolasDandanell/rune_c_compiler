@@ -130,7 +130,6 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS      0x1F"));
-    definitions_file.add_line(format!("#define RUNE_NO_VERIFICATION_FIELD INT8_MIN"));
     definitions_file.add_line(format!("#define RUNE_NO_PARSER             0"));
     definitions_file.add_line(format!("#define RUNE_TRANSPORT_TYPE_BITS   0xE0"));
     definitions_file.add_line(format!("#define RUNE_VERIFICATION_FIELD    0x1F"));
