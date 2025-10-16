@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [[bin]]
-name="runec"
+name="rune_c_compiler"
 path="src/main.rs"
 
 [dependencies]
