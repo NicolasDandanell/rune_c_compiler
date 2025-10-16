@@ -1,9 +1,9 @@
 # Rune to C Compiler
 
-This program was written to compile _.rune_ files into C source files. It allows the user to specify whether the packages and respective metadata should be packed, as well as which linker section the metadata should be placed in.
+This program was written to compile _.rune_ files into C source files. It allows the user to specify whether the packages and respective metadata should be packed, as well as which linker section the metadata should be placed in. This is still in active development, and many changes and features are yet to come.
 
 ## Dependencies
-Currently this program needs to be compiled from source to be used, but binaries are planned to be released in the future to avoid a dependence on Rust to run the program in the main Rune library.
+Currently this program needs to be compiled from source to be used by the main Rune library (not published yet), but binaries are planned to be released in the future to avoid a dependence on Rust to run the program in the main Rune library.
 
 ## Usage
 To use the Rune C compiler, simply specify the following parameters:
