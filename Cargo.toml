@@ -1,7 +1,11 @@
 [package]
-name = "rune_c_compiler"
-version = "0.2.0"
+description = "A Rune to C source file compiler"
 edition = "2024"
+license = "MIT"
+name = "rune_c_compiler"
+readme = "README.MD"
+repository = "https://github.com/NicolasDandanell/rune_parser"
+version = "0.2.0"
 
 [[bin]]
 name="rune_c_compiler"
