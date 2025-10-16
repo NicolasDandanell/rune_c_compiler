@@ -140,8 +140,13 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
                 _ => String::from("RUNE_NO_PARSER")
             };
 
+            let offset_string: String = match &index_sorted_members[i].field_type {
+                FieldType::Empty => String::from("0"),
+                _ => format!("offsetof({0}_t, {1})", struct_name, member_name)
+            };
+
             source_file.add_line(format!("        /* {0}{1}: {2}{3}{4} */ {{", init_char, member_name, spaces(spacing), i, verification_string));
-            source_file.add_line(format!("            .field_offset       = offsetof({0}_t, {1}),", struct_name, member_name));
+            source_file.add_line(format!("            .field_offset       = {0},", offset_string));
             source_file.add_line(format!("            .field_size         = {0},", size_string));
             source_file.add_line(format!("            .parser_array_index = {0}", parser_index_string));
 

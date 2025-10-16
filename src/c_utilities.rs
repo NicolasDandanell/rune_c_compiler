@@ -178,7 +178,8 @@ impl CFieldType for FieldType {
 
                 let array_size: String = match field_size {
                     ArraySize::UserDefinition(definition) => definition.identifier.clone(),
-                    ArraySize::NumericValue(size) => size.to_string()
+                    ArraySize::DecimalValue(size) => size.to_string(),
+                    ArraySize::HexValue(size) => format!("0x{0:02X}", size)
                 };
 
                 format!("{0} {1}{2}[{3}]", field_type.to_c_type(), spaces(spacing), name, array_size)
@@ -233,7 +234,8 @@ impl CFieldType for FieldType {
             FieldType::Array(field_type, array_size) =>
                 format!("{{ [0 ... {0}] = {1} }}",
                     match array_size {
-                        ArraySize::NumericValue(value) => value - 1,
+                        ArraySize::DecimalValue(value) => format!("{0}", value - 1),
+                        ArraySize::HexValue(value) => format!("0x{0:02X}", value - 1),
                         ArraySize::UserDefinition(definition) => {
                             let size_value: usize = match definition.value {
                                 DefineValue::IntegerLiteral(value) => match value.try_into() {
@@ -242,7 +244,7 @@ impl CFieldType for FieldType {
                                 },
                                 _ => panic!("Got \"{0:?}\" array size definition of an invalid type!", self)
                             };
-                            size_value - 1
+                            format!("{0}", size_value - 1)
                         }
                     },
                     match field_type.as_ref() {
@@ -308,7 +310,8 @@ impl CStructMember for StructMember {
 
                 match array_size {
                     ArraySize::UserDefinition(define) => format!("({0} * {1})", type_string, define.identifier),
-                    ArraySize::NumericValue(size) => format!("({0} * {1})", type_string, size)
+                    ArraySize::DecimalValue(size) => format!("({0} * {1})", type_string, size),
+                    ArraySize::HexValue(size) => format!("({0} * 0x{1:02X})", type_string, size)
                 }
             },
             FieldType::Empty => String::from("0"),
@@ -325,7 +328,8 @@ impl CStructMember for StructMember {
 
                 // Get the array size first
                 let array_size: usize = match field_size {
-                    ArraySize::NumericValue(value) => *value,
+                    ArraySize::DecimalValue(value) => *value,
+                    ArraySize::HexValue(value) => *value,
                     ArraySize::UserDefinition(definition) => match definition.value {
                         DefineValue::IntegerLiteral(value) => match value.try_into() {
                             Err(error) => panic!("Could not parse \"{0}\" array size into a positive integer value! Got error {1}", self.ident, error),

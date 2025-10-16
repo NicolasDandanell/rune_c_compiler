@@ -213,6 +213,7 @@ fn output_define(header_file: &mut OutputFile, define: &DefineDefinition) {
         DefineValue::NoValue => String::from(""),
         DefineValue::FloatLiteral(value)   => value.to_string(),
         DefineValue::IntegerLiteral(value) => value.to_string(),
+        DefineValue::HexLiteral(value)     => format!("0x{0:02X}", value),
         DefineValue::Composite(value)   => value.clone()
     };
 
@@ -258,6 +259,7 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
 
         let is_zero: bool = match enum_member.value {
             EnumValue::IntegerLiteral(value) => value == 0,
+            EnumValue::HexLiteral(value)     => value == 0,
             EnumValue::FloatLiteral(value)   => value == 0.0,
         };
 
