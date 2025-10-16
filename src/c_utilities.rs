@@ -150,7 +150,8 @@ impl CFieldType for FieldType {
             // This will return the string of the underlying type
             FieldType::Array(underlying_type, _) => underlying_type.to_c_type(),
 
-            FieldType::Empty => panic!("Empty fields have no type!")
+            FieldType::Empty               => panic!("Empty fields have no type!"),
+            FieldType::VerificationReserve => panic!("Verification reserve has no type")
         }
     }
 
@@ -183,7 +184,8 @@ impl CFieldType for FieldType {
                 format!("{0} {1}{2}[{3}]", field_type.to_c_type(), spaces(spacing), name, array_size)
             }
 
-            FieldType::Empty => panic!("Cannot create an empty field!")
+            FieldType::Empty               => panic!("Cannot create an empty field!"),
+            FieldType::VerificationReserve => panic!("Verification reserves are not variables!")
         }
     }
 
@@ -205,6 +207,9 @@ impl CFieldType for FieldType {
             FieldType::ULong   => 8,
             FieldType::Long    => 8,
 
+            FieldType::Empty               => 0,
+            FieldType::VerificationReserve => 0,
+
             _ => panic!("Cannot call this function on an array or user defined type")
         }
     }
@@ -223,6 +228,7 @@ impl CFieldType for FieldType {
             FieldType::Long                       => String::from("0"),
             FieldType::ULong                      => String::from("0"),
             FieldType::Empty                      => panic!("Cannot initialize an empty field!"),
+            FieldType::VerificationReserve        => panic!("Cannot initialize a verification reserve"),
             FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
             FieldType::Array(field_type, array_size) =>
                 format!("{{ [0 ... {0}] = {1} }}",
@@ -240,20 +246,21 @@ impl CFieldType for FieldType {
                         }
                     },
                     match field_type.as_ref() {
-                        FieldType::Boolean           => String::from("false"),
-                        FieldType::Byte              => String::from("0"),
-                        FieldType::UByte             => String::from("0"),
-                        FieldType::Short             => String::from("0"),
-                        FieldType::UShort            => String::from("0"),
-                        FieldType::Float             => String::from("0.0"),
-                        FieldType::Int               => String::from("0"),
-                        FieldType::UInt              => String::from("0"),
-                        FieldType::Double            => String::from("0.0"),
-                        FieldType::Long              => String::from("0"),
-                        FieldType::ULong             => String::from("0"),
-                        FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
-                        FieldType::Array(_, _)       => panic!("Nested arrays are not currently supported"),
-                        FieldType::Empty             => panic!("Cannot initialize an empty field!")
+                        FieldType::Boolean             => String::from("false"),
+                        FieldType::Byte                => String::from("0"),
+                        FieldType::UByte               => String::from("0"),
+                        FieldType::Short               => String::from("0"),
+                        FieldType::UShort              => String::from("0"),
+                        FieldType::Float               => String::from("0.0"),
+                        FieldType::Int                 => String::from("0"),
+                        FieldType::UInt                => String::from("0"),
+                        FieldType::Double              => String::from("0.0"),
+                        FieldType::Long                => String::from("0"),
+                        FieldType::ULong               => String::from("0"),
+                        FieldType::UserDefined(name)   => format!("{0}_INIT", pascal_to_uppercase(&name)),
+                        FieldType::Array(_, _)         => panic!("Nested arrays are not currently supported"),
+                        FieldType::Empty               => panic!("Cannot initialize an empty field!"),
+                        FieldType::VerificationReserve => panic!("Cannot initialize a verification reserve")
                     }
             )
         }
@@ -334,10 +341,10 @@ impl CStructMember for StructMember {
 
                     // Parse the user defined type using the member user_definition_link
                     FieldType::UserDefined(type_string) => match &self.user_definition_link {
-                        UserDefinitionLink::NoLink                                    => panic!("Could not find definition for type {0} while parsing C size", type_string),
+                        UserDefinitionLink::NoLink                                        => panic!("Could not find definition for type {0} while parsing C size", type_string),
                         UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.primitive_c_size() * array_size,
-                        UserDefinitionLink::EnumLink(enum_definition)             => enum_definition.backing_type.primitive_c_size() * array_size,
-                        UserDefinitionLink::StructLink(struct_definition)       => {
+                        UserDefinitionLink::EnumLink(enum_definition)         => enum_definition.backing_type.primitive_c_size() * array_size,
+                        UserDefinitionLink::StructLink(struct_definition)     => {
 
                             let mut struct_size = 0;
 
@@ -397,6 +404,11 @@ impl CStructDefinition for StructDefinition {
         let mut aligned_1: Vec<StructMember> = Vec::with_capacity(0x20);
 
         for member in &self.members {
+
+            // Zero-size members are discarded
+            if member.c_size() == 0 {
+                continue
+            }
 
             if member.c_size() % 8 == 0 {
                 // First 8 aligned

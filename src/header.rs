@@ -22,7 +22,7 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
         FieldType::Byte  | FieldType::UByte  => (FieldType::UByte, FieldType::Byte),
         FieldType::Short | FieldType::UShort => (FieldType::UShort, FieldType::Short),
         FieldType::Int   | FieldType::UInt   => (FieldType::UInt, FieldType::Int),
-        FieldType::Long  | FieldType::Long   => (FieldType::ULong, FieldType::Long),
+        FieldType::Long  | FieldType::ULong  => (FieldType::ULong, FieldType::Long),
         _ => unreachable!("Only integer type primitives can back bitfields")
     };
 
@@ -313,7 +313,7 @@ fn output_struct(header_file: &mut OutputFile, struct_definition: &StructDefinit
     // Print all struct members
     for i in 0..sorted_member_list.len() {
 
-        let struct_member = &sorted_member_list[i];
+        let struct_member: &StructMember = &sorted_member_list[i];
 
         // Member comment
         if struct_member.comment.is_some() {

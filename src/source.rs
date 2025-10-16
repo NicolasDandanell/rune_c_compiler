@@ -112,8 +112,6 @@ pub fn output_source(file: &RuneFileDescription, output_path: &Path) {
 
         source_file.add_line(format!("    .field_info               = {{"));
 
-
-
         for i in 0..member_count {
             let member_name: String = pascal_to_snake_case(&index_sorted_members[i].ident);
             let spacing: usize      = longest_member_name_size - member_name.len();
