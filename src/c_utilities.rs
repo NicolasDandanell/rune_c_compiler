@@ -131,6 +131,7 @@ impl CFieldType for FieldType {
     fn to_c_type(&self) -> String {
         match self {
             FieldType::Boolean => String::from("bool"),
+            FieldType::Char    => String::from("char"),
             FieldType::UByte   => String::from("uint8_t"),
             FieldType::Byte    => String::from("int8_t"),
 
@@ -158,6 +159,7 @@ impl CFieldType for FieldType {
     fn create_c_variable(&self, name: &String, spacing: usize) -> String {
         match self {
             FieldType::Boolean => format!("bool {0}{1}", spaces(spacing), name),
+            FieldType::Char    => format!("char {0}{1}", spaces(spacing), name),
             FieldType::UByte   => format!("uint8_t {0}{1}", spaces(spacing), name),
             FieldType::Byte    => format!("int8_t {0}{1}", spaces(spacing), name),
 
@@ -193,6 +195,7 @@ impl CFieldType for FieldType {
     fn primitive_c_size(&self) -> usize {
         match self {
             FieldType::Boolean => 1,
+            FieldType::Char    => 1,
             FieldType::UByte   => 1,
             FieldType::Byte    => 1,
 
@@ -217,6 +220,7 @@ impl CFieldType for FieldType {
     fn c_initializer(&self) -> String {
         match self {
             FieldType::Boolean                    => String::from("false"),
+            FieldType::Char                       => String::from("0"),
             FieldType::Byte                       => String::from("0"),
             FieldType::UByte                      => String::from("0"),
             FieldType::Short                      => String::from("0"),
@@ -247,6 +251,7 @@ impl CFieldType for FieldType {
                     },
                     match field_type.as_ref() {
                         FieldType::Boolean             => String::from("false"),
+                        FieldType::Char                => String::from("0"),
                         FieldType::Byte                => String::from("0"),
                         FieldType::UByte               => String::from("0"),
                         FieldType::Short               => String::from("0"),
