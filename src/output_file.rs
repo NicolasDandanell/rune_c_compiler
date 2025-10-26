@@ -1,14 +1,17 @@
-use std::{ fs::{ create_dir, File, remove_file }, io::Write, path::Path };
+use std::{
+    fs::{File, create_dir, remove_file},
+    io::Write,
+    path::Path
+};
 
 pub struct OutputFile {
     path:          String,
-    name:     String,
+    name:          String,
     string_buffer: String
 }
 
 impl OutputFile {
     pub fn new(output_path: String, file_name: String) -> OutputFile {
-
         // Create string buffer
         let string_buffer: String = String::with_capacity(0x2000);
 
@@ -33,7 +36,7 @@ impl OutputFile {
     fn create_folder(path: &Path) {
         if path.exists() {
             // If path already exists, do nothing and return
-            return
+            return;
         }
 
         match path.parent() {
@@ -81,6 +84,6 @@ impl OutputFile {
                 Err(error) => panic!("Could not flush to \"{0}\" file. Got error {1}", self.name, error),
                 Ok(_) => ()
             }
-         }
+        }
     }
 }

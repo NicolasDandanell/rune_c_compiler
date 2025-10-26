@@ -1,7 +1,11 @@
-use crate::c_utilities::{ pascal_to_uppercase, spaces, CConfigurations };
-use crate::output_file::OutputFile;
-use rune_parser::{ RuneFileDescription, types::StructDefinition };
 use std::path::Path;
+
+use rune_parser::{RuneFileDescription, types::StructDefinition};
+
+use crate::{
+    c_utilities::{CConfigurations, pascal_to_uppercase, spaces},
+    output_file::OutputFile
+};
 
 fn type_from_size(size: usize) -> String {
     match size {
@@ -15,9 +19,9 @@ fn type_from_size(size: usize) -> String {
 
 pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) {
     let mut bitfield_attributes: String = String::with_capacity(0x100);
-    let     enum_attributes:     String = String::with_capacity(0x100);
-    let mut parser_attributes:   String = String::with_capacity(0x100);
-    let mut struct_attributes:   String = String::with_capacity(0x100);
+    let enum_attributes: String = String::with_capacity(0x100);
+    let mut parser_attributes: String = String::with_capacity(0x100);
+    let mut struct_attributes: String = String::with_capacity(0x100);
 
     let mut metadata_attributes: String = String::with_capacity(0x100);
 
@@ -26,7 +30,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
 
     // Bitfields are always packed!
     match bitfield_attributes.is_empty() {
-        true  => bitfield_attributes.push_str("packed"),
+        true => bitfield_attributes.push_str("packed"),
         false => bitfield_attributes.push_str(", packed")
     }
 
@@ -35,20 +39,20 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     if configurations.compiler_configurations.pack_data {
         // Parser
         match parser_attributes.is_empty() {
-            true  => parser_attributes.push_str("packed"),
+            true => parser_attributes.push_str("packed"),
             false => parser_attributes.push_str(", packed")
         }
 
         // Structs
         match struct_attributes.is_empty() {
-            true  => struct_attributes.push_str("packed"),
+            true => struct_attributes.push_str("packed"),
             false => struct_attributes.push_str(", packed")
         }
     }
 
     if configurations.compiler_configurations.pack_metadata {
         match metadata_attributes.is_empty() {
-            true  => metadata_attributes.push_str("packed"),
+            true => metadata_attributes.push_str("packed"),
             false => metadata_attributes.push_str(", packed")
         }
     }
@@ -61,7 +65,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
 
         // Parser
         match parser_attributes.is_empty() {
-            true  => parser_attributes.push_str(format!("section(\"{0}\")", section_name).as_str()),
+            true => parser_attributes.push_str(format!("section(\"{0}\")", section_name).as_str()),
             false => parser_attributes.push_str(format!(", section(\"{0}\")", section_name).as_str())
         }
     }
@@ -74,25 +78,25 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
 
     // Enums
     let runic_enum_string: String = match enum_attributes.is_empty() {
-        true  => String::new(),
+        true => String::new(),
         false => format!("__attribute__(({0}))", enum_attributes)
     };
 
     // Parser
     let runic_parser_string: String = match parser_attributes.is_empty() {
-        true  => String::new(),
+        true => String::new(),
         false => format!("__attribute__(({0}))", parser_attributes)
     };
 
     // Structs
     let runic_struct_string: String = match struct_attributes.is_empty() {
-        true  => String::new(),
+        true => String::new(),
         false => format!("__attribute__(({0}))", struct_attributes)
     };
 
     // Metadata
     let runic_metadata_string: String = match metadata_attributes.is_empty() {
-        true  => String::new(),
+        true => String::new(),
         false => format!("__attribute__(({0}))", metadata_attributes)
     };
 
@@ -129,17 +133,19 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("// ———————————————————"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS      0x1F"));
-    definitions_file.add_line(format!("#define RUNE_NO_PARSER             0"));
-    definitions_file.add_line(format!("#define RUNE_TRANSPORT_TYPE_BITS   0xE0"));
-    definitions_file.add_line(format!("#define RUNE_VERIFICATION_FIELD    0x1F"));
+    definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS    0x1F"));
+    definitions_file.add_line(format!("#define RUNE_NO_PARSER           0"));
+    definitions_file.add_line(format!("#define RUNE_TRANSPORT_TYPE_BITS 0xE0"));
+    definitions_file.add_line(format!("#define RUNE_VERIFICATION_FIELD  0x1F"));
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("// Configuration dependent definitions"));
     definitions_file.add_line(format!("// ————————————————————————————————————"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */"));
+    definitions_file.add_line(format!(
+        "/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */"
+    ));
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("#define RUNIC_BITFIELD {0}", runic_bitfield_string));
@@ -152,13 +158,39 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("// ——————————————————————————————"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */"));
+    definitions_file.add_line(format!(
+        "/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */"
+    ));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define RUNE_FIELD_SIZE_TYPE   {0}", match configurations.compiler_configurations.pack_metadata { true => type_from_size(configurations.field_size_type_size),   false => String::from("size_t")}));
-    definitions_file.add_line(format!("#define RUNE_FIELD_OFFSET_TYPE {0}", match configurations.compiler_configurations.pack_metadata { true => type_from_size(configurations.field_offset_type_size), false => String::from("size_t")}));
-    definitions_file.add_line(format!("#define RUNE_MESSAGE_SIZE_TYPE {0}", match configurations.compiler_configurations.pack_metadata { true => type_from_size(configurations.message_size_type_size), false => String::from("size_t")}));
-    definitions_file.add_line(format!("#define RUNE_PARSER_INDEX_TYPE {0}", match configurations.compiler_configurations.pack_metadata { true => type_from_size(configurations.parser_index_type_size), false => String::from("size_t")}));
+    definitions_file.add_line(format!(
+        "#define RUNE_FIELD_SIZE_TYPE   {0}",
+        match configurations.compiler_configurations.pack_metadata {
+            true => type_from_size(configurations.field_size_type_size),
+            false => String::from("size_t")
+        }
+    ));
+    definitions_file.add_line(format!(
+        "#define RUNE_FIELD_OFFSET_TYPE {0}",
+        match configurations.compiler_configurations.pack_metadata {
+            true => type_from_size(configurations.field_offset_type_size),
+            false => String::from("size_t")
+        }
+    ));
+    definitions_file.add_line(format!(
+        "#define RUNE_MESSAGE_SIZE_TYPE {0}",
+        match configurations.compiler_configurations.pack_metadata {
+            true => type_from_size(configurations.message_size_type_size),
+            false => String::from("size_t")
+        }
+    ));
+    definitions_file.add_line(format!(
+        "#define RUNE_PARSER_INDEX_TYPE {0}",
+        match configurations.compiler_configurations.pack_metadata {
+            true => type_from_size(configurations.parser_index_type_size),
+            false => String::from("size_t")
+        }
+    ));
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("/** Defines whether and how metadata generated by the rune compiler should be packed optimized */"));
@@ -187,11 +219,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     for i in 0..struct_definitions.len() {
         let struct_name: String = pascal_to_uppercase(&struct_definitions[i].name);
 
-        definitions_file.add_line(format!("#define RUNE_{0}_PARSER_INDEX {1}{2}",
-            struct_name,
-            spaces(longest_struct_name - struct_name.len()),
-            i + 1
-        ));
+        definitions_file.add_line(format!("#define RUNE_{0}_PARSER_INDEX {1}{2}", struct_name, spaces(longest_struct_name - struct_name.len()), i + 1));
     }
     definitions_file.add_newline();
 

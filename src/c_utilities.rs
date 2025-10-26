@@ -1,5 +1,10 @@
+use rune_parser::{
+    RuneFileDescription,
+    scanner::NumericLiteral,
+    types::{ArraySize, DefineValue, FieldIndex, FieldType, StructDefinition, StructMember, UserDefinitionLink}
+};
+
 use crate::CompileConfigurations;
-use rune_parser::{ types::{ ArraySize, DefineValue, FieldSlot, FieldType, StructDefinition, StructMember, UserDefinitionLink }, RuneFileDescription };
 
 // String helper functions
 // ————————————————————————
@@ -20,10 +25,11 @@ pub fn pascal_to_snake_case(pascal: &String) -> String {
     let mut snake: String = String::with_capacity(0x40);
 
     for i in 0..pascal.len() {
-
         let letter: char = pascal.chars().nth(i).unwrap();
 
-        if i != 0 && letter.is_ascii_uppercase() { snake.push('_'); }
+        if i != 0 && letter.is_ascii_uppercase() {
+            snake.push('_');
+        }
 
         snake.push(letter.to_ascii_lowercase());
     }
@@ -36,10 +42,11 @@ pub fn pascal_to_uppercase(pascal: &String) -> String {
     let mut uppecase: String = String::with_capacity(0x40);
 
     for i in 0..pascal.len() {
-
         let letter: char = pascal.chars().nth(i).unwrap();
 
-        if i != 0 && letter.is_ascii_uppercase() { uppecase.push('_'); }
+        if i != 0 && letter.is_ascii_uppercase() {
+            uppecase.push('_');
+        }
 
         uppecase.push(letter.to_ascii_uppercase());
     }
@@ -55,32 +62,30 @@ pub struct CConfigurations {
     pub compiler_configurations: CompileConfigurations,
 
     // Data definitions
-    pub field_size_type_size:    usize,
-    pub field_offset_type_size:  usize,
-    pub message_size_type_size:  usize,
-    pub parser_index_type_size:  usize,
+    pub field_size_type_size:   usize,
+    pub field_offset_type_size: usize,
+    pub message_size_type_size: usize,
+    pub parser_index_type_size: usize
 }
 
 impl CConfigurations {
     pub fn parse(file_descriptions: &Vec<RuneFileDescription>, configurations: &CompileConfigurations) -> CConfigurations {
-        let mut amount_of_messages:   usize = 0;
-        let mut largest_message_size: usize = 0;
+        let mut amount_of_messages: u64 = 0;
+        let mut largest_message_size: u64 = 0;
 
         // Get the largest overall message size, and the amount of messages
         for file in file_descriptions {
-
             // Add struct definition amount to amount of messages
-            amount_of_messages += file.definitions.structs.len();
+            amount_of_messages += file.definitions.structs.len() as u64;
 
             for struct_definition in &file.definitions.structs {
-
-                let estimated_size: usize = struct_definition.estimate_size(configurations);
+                let estimated_size: u64 = struct_definition.estimate_size(configurations);
 
                 if estimated_size > largest_message_size {
                     largest_message_size = estimated_size;
                 }
             }
-        };
+        }
 
         // println!("Out of {0} messages, the largest one found was estimated at {1} bytes\n", amount_of_messages, largest_message_size);
 
@@ -90,7 +95,7 @@ impl CConfigurations {
             0x00000100..=0x0000FFFF => 2,
             0x00010000..=0xFFFFFFFF => 4,
             // 8 byte option is probably not needed, but add anyway...
-            _                       => 8
+            _ => 8
         };
 
         // Field size type and offset size type will be based on the largest message size
@@ -100,12 +105,11 @@ impl CConfigurations {
             0x00000100..=0x0000FFFF => 2,
             0x00010000..=0xFFFFFFFF => 4,
             // 8 byte option is probably not needed, but add anyway...
-            _                       => 8
+            _ => 8
         };
 
-        let field_size_type_size:   usize = message_size_type_size;
+        let field_size_type_size: usize = message_size_type_size;
         let field_offset_type_size: usize = message_size_type_size;
-
 
         CConfigurations {
             compiler_configurations: configurations.clone(),
@@ -123,7 +127,7 @@ impl CConfigurations {
 pub trait CFieldType {
     fn c_initializer(&self) -> String;
     fn create_c_variable(&self, name: &String, spacing: usize) -> String;
-    fn primitive_c_size(&self) -> usize;
+    fn primitive_c_size(&self) -> u64;
     fn to_c_type(&self) -> String;
 }
 
@@ -131,137 +135,106 @@ impl CFieldType for FieldType {
     fn to_c_type(&self) -> String {
         match self {
             FieldType::Boolean => String::from("bool"),
-            FieldType::UByte   => String::from("uint8_t"),
-            FieldType::Byte    => String::from("int8_t"),
+            FieldType::Char => String::from("char"),
+            FieldType::UByte => String::from("uint8_t"),
+            FieldType::Byte => String::from("int8_t"),
 
-            FieldType::UShort  => String::from("uint16_t"),
-            FieldType::Short   => String::from("int16_t"),
+            FieldType::UShort => String::from("uint16_t"),
+            FieldType::Short => String::from("int16_t"),
 
-            FieldType::Float   => String::from("float"),
-            FieldType::UInt    => String::from("uint32_t"),
-            FieldType::Int     => String::from("int32_t"),
+            FieldType::Float => String::from("float"),
+            FieldType::UInt => String::from("uint32_t"),
+            FieldType::Int => String::from("int32_t"),
 
-            FieldType::Double  => String::from("double"),
-            FieldType::ULong   => String::from("uint64_t"),
-            FieldType::Long    => String::from("int64_t"),
+            FieldType::Double => String::from("double"),
+            FieldType::ULong => String::from("uint64_t"),
+            FieldType::Long => String::from("int64_t"),
 
             FieldType::UserDefined(string) => format!("{0}_t", pascal_to_snake_case(string)),
 
             // This will return the string of the underlying type
             FieldType::Array(underlying_type, _) => underlying_type.to_c_type(),
 
-            FieldType::Empty               => panic!("Empty fields have no type!"),
-            FieldType::VerificationReserve => panic!("Verification reserve has no type")
+            FieldType::Empty => panic!("Empty fields have no type!")
         }
     }
 
     fn create_c_variable(&self, name: &String, spacing: usize) -> String {
         match self {
             FieldType::Boolean => format!("bool {0}{1}", spaces(spacing), name),
-            FieldType::UByte   => format!("uint8_t {0}{1}", spaces(spacing), name),
-            FieldType::Byte    => format!("int8_t {0}{1}", spaces(spacing), name),
+            FieldType::Char => format!("char {0}{1}", spaces(spacing), name),
+            FieldType::UByte => format!("uint8_t {0}{1}", spaces(spacing), name),
+            FieldType::Byte => format!("int8_t {0}{1}", spaces(spacing), name),
 
-            FieldType::UShort  => format!("uint16_t {0}{1}", spaces(spacing), name),
-            FieldType::Short   => format!("int16_t {0}{1}", spaces(spacing), name),
+            FieldType::UShort => format!("uint16_t {0}{1}", spaces(spacing), name),
+            FieldType::Short => format!("int16_t {0}{1}", spaces(spacing), name),
 
-            FieldType::Float   => format!("float {0}{1}", spaces(spacing), name),
-            FieldType::UInt    => format!("uint32_t {0}{1}", spaces(spacing), name),
-            FieldType::Int     => format!("int32_t {0}{1}", spaces(spacing), name),
+            FieldType::Float => format!("float {0}{1}", spaces(spacing), name),
+            FieldType::UInt => format!("uint32_t {0}{1}", spaces(spacing), name),
+            FieldType::Int => format!("int32_t {0}{1}", spaces(spacing), name),
 
-            FieldType::Double  => format!("double {0}{1}", spaces(spacing), name),
-            FieldType::ULong   => format!("uint64_t {0}{1}", spaces(spacing), name),
-            FieldType::Long    => format!("int64_t {0}{1}", spaces(spacing), name),
+            FieldType::Double => format!("double {0}{1}", spaces(spacing), name),
+            FieldType::ULong => format!("uint64_t {0}{1}", spaces(spacing), name),
+            FieldType::Long => format!("int64_t {0}{1}", spaces(spacing), name),
 
             FieldType::UserDefined(string) => format!("{0}_t {1}{2}", pascal_to_snake_case(string), spaces(spacing), name),
-
-            FieldType::Array(field_type, field_size) => {
-
-                let array_size: String = match field_size {
-                    ArraySize::UserDefinition(definition) => definition.identifier.clone(),
-                    ArraySize::NumericValue(size) => size.to_string()
-                };
-
-                format!("{0} {1}{2}[{3}]", field_type.to_c_type(), spaces(spacing), name, array_size)
-            }
-
-            FieldType::Empty               => panic!("Cannot create an empty field!"),
-            FieldType::VerificationReserve => panic!("Verification reserves are not variables!")
+            FieldType::Array(field_type, field_size) => format!("{0} {1}{2}[{3}]", field_type.to_c_type(), spaces(spacing), name, field_size.to_string()),
+            FieldType::Empty => panic!("Cannot create an empty field!")
         }
     }
 
     // Size is calculated without padding, and is a guesstimate at best
-    fn primitive_c_size(&self) -> usize {
+    fn primitive_c_size(&self) -> u64 {
         match self {
             FieldType::Boolean => 1,
-            FieldType::UByte   => 1,
-            FieldType::Byte    => 1,
+            FieldType::Char => 1,
+            FieldType::UByte => 1,
+            FieldType::Byte => 1,
 
-            FieldType::UShort  => 2,
-            FieldType::Short   => 2,
+            FieldType::UShort => 2,
+            FieldType::Short => 2,
 
-            FieldType::Float   => 4,
-            FieldType::UInt    => 4,
-            FieldType::Int     => 4,
+            FieldType::Float => 4,
+            FieldType::UInt => 4,
+            FieldType::Int => 4,
 
-            FieldType::Double  => 8,
-            FieldType::ULong   => 8,
-            FieldType::Long    => 8,
+            FieldType::Double => 8,
+            FieldType::ULong => 8,
+            FieldType::Long => 8,
 
-            FieldType::Empty               => 0,
-            FieldType::VerificationReserve => 0,
-
+            FieldType::Empty => 0,
             _ => panic!("Cannot call this function on an array or user defined type")
         }
     }
 
     fn c_initializer(&self) -> String {
         match self {
-            FieldType::Boolean                    => String::from("false"),
-            FieldType::Byte                       => String::from("0"),
-            FieldType::UByte                      => String::from("0"),
-            FieldType::Short                      => String::from("0"),
-            FieldType::UShort                     => String::from("0"),
-            FieldType::Float                      => String::from("0.0"),
-            FieldType::Int                        => String::from("0"),
-            FieldType::UInt                       => String::from("0"),
-            FieldType::Double                     => String::from("0.0"),
-            FieldType::Long                       => String::from("0"),
-            FieldType::ULong                      => String::from("0"),
-            FieldType::Empty                      => panic!("Cannot initialize an empty field!"),
-            FieldType::VerificationReserve        => panic!("Cannot initialize a verification reserve"),
+            FieldType::Boolean => String::from("false"),
+            FieldType::Char => String::from("0"),
+            FieldType::Byte => String::from("0"),
+            FieldType::UByte => String::from("0"),
+            FieldType::Short => String::from("0"),
+            FieldType::UShort => String::from("0"),
+            FieldType::Float => String::from("0.0"),
+            FieldType::Int => String::from("0"),
+            FieldType::UInt => String::from("0"),
+            FieldType::Double => String::from("0.0"),
+            FieldType::Long => String::from("0"),
+            FieldType::ULong => String::from("0"),
+            FieldType::Empty => panic!("Cannot initialize an empty field!"),
             FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
-            FieldType::Array(field_type, array_size) =>
-                format!("{{ [0 ... {0}] = {1} }}",
-                    match array_size {
-                        ArraySize::NumericValue(value) => value - 1,
-                        ArraySize::UserDefinition(definition) => {
-                            let size_value: usize = match definition.value {
-                                DefineValue::IntegerLiteral(value) => match value.try_into() {
-                                    Err(error) => panic!("Could not parse \"{0:?}\" array size into a positive integer value! Got error {1}", self, error),
-                                    Ok(value) => value
-                                },
-                                _ => panic!("Got \"{0:?}\" array size definition of an invalid type!", self)
-                            };
-                            size_value - 1
-                        }
-                    },
-                    match field_type.as_ref() {
-                        FieldType::Boolean             => String::from("false"),
-                        FieldType::Byte                => String::from("0"),
-                        FieldType::UByte               => String::from("0"),
-                        FieldType::Short               => String::from("0"),
-                        FieldType::UShort              => String::from("0"),
-                        FieldType::Float               => String::from("0.0"),
-                        FieldType::Int                 => String::from("0"),
-                        FieldType::UInt                => String::from("0"),
-                        FieldType::Double              => String::from("0.0"),
-                        FieldType::Long                => String::from("0"),
-                        FieldType::ULong               => String::from("0"),
-                        FieldType::UserDefined(name)   => format!("{0}_INIT", pascal_to_uppercase(&name)),
-                        FieldType::Array(_, _)         => panic!("Nested arrays are not currently supported"),
-                        FieldType::Empty               => panic!("Cannot initialize an empty field!"),
-                        FieldType::VerificationReserve => panic!("Cannot initialize a verification reserve")
-                    }
+            FieldType::Array(field_type, array_size) => format!(
+                "{{ [0 ... {0}] = {1} }}",
+                array_size.last_index_string(),
+                match field_type.as_ref() {
+                    FieldType::Boolean => String::from("false"),
+                    FieldType::Char | FieldType::Byte | FieldType::UByte | FieldType::Short | FieldType::UShort | FieldType::Int | FieldType::UInt | FieldType::Long | FieldType::ULong =>
+                        String::from("0"),
+                    FieldType::Float | FieldType::Double => String::from("0.0"),
+                    FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
+                    FieldType::Array(_, _) => panic!("Nested arrays are not currently supported"),
+                    FieldType::Empty => panic!("Cannot initialize an empty field!")
+                }
             )
         }
     }
@@ -271,82 +244,81 @@ impl CFieldType for FieldType {
 // ——————————————————————
 
 pub trait CStructMember {
-    fn c_size(&self) -> usize;
+    fn c_size(&self) -> u64;
     fn c_size_definition(&self) -> String;
-    fn index_empty(index: usize) -> StructMember;
+    fn index_empty(index: u64) -> StructMember;
 }
 
 impl CStructMember for StructMember {
-    fn index_empty(index: usize) -> StructMember {
+    fn index_empty(index: u64) -> StructMember {
         // Check if value is positive and within the legal values (0 to and including 31)
         let field_index = match index {
             // Legal values
-            0..32 => FieldSlot::NamedSlot(index as usize),
+            0..32 => FieldIndex::Numeric(index),
             // Higher than legal values
-            32..  => panic!("Field index cannot have a value higher than 31!")
+            32.. => panic!("Field index cannot have a value higher than 31!")
         };
 
         StructMember {
-            ident:                String::from("(empty)"),
-            field_type:           FieldType::Empty,
-            field_slot:           field_index,
+            identifier:           String::from("(empty)"),
+            data_type:            FieldType::Empty,
+            index:                field_index,
             user_definition_link: UserDefinitionLink::NoLink,
             comment:              None
-
         }
     }
 
     fn c_size_definition(&self) -> String {
-        let size_string: String = match &self.field_type {
-            FieldType::UserDefined(type_name) => format!("sizeof({0}_t)", pascal_to_snake_case(&type_name)),
+        let size_string: String = match &self.data_type {
+            FieldType::UserDefined(type_name) => {
+                format!("sizeof({0}_t)", pascal_to_snake_case(&type_name))
+            },
             FieldType::Array(array_type, array_size) => {
                 let type_string: String = match &(**array_type) {
                     FieldType::Array(_, _) => panic!("Nested arrays are not supported!"),
-                    FieldType::UserDefined(name) => format!("sizeof({0}_t)", pascal_to_snake_case(&name)),
+                    FieldType::UserDefined(name) => {
+                        format!("sizeof({0}_t)", pascal_to_snake_case(&name))
+                    },
                     _ => format!("sizeof({0})", array_type.to_c_type())
                 };
 
-                match array_size {
-                    ArraySize::UserDefinition(define) => format!("({0} * {1})", type_string, define.identifier),
-                    ArraySize::NumericValue(size) => format!("({0} * {1})", type_string, size)
-                }
+                format!("({0} * {1})", type_string, array_size.to_string())
             },
             FieldType::Empty => String::from("0"),
-            _ => format!("sizeof({0})", self.field_type.to_c_type())
+            _ => format!("sizeof({0})", self.data_type.to_c_type())
         };
         size_string
     }
 
-    fn c_size(&self) -> usize {
-        match &self.field_type {
-
+    fn c_size(&self) -> u64 {
+        match &self.data_type {
             // Calculate Array size based on (field type * field size)
             FieldType::Array(array_field_type, field_size) => {
-
                 // Get the array size first
-                let array_size: usize = match field_size {
-                    ArraySize::NumericValue(value) => *value,
-                    ArraySize::UserDefinition(definition) => match definition.value {
-                        DefineValue::IntegerLiteral(value) => match value.try_into() {
-                            Err(error) => panic!("Could not parse \"{0}\" array size into a positive integer value! Got error {1}", self.ident, error),
-                            Ok(value) => value
+                let array_size: u64 = match field_size {
+                    ArraySize::Binary(value) | ArraySize::Decimal(value) | ArraySize::Hexadecimal(value) => *value,
+                    ArraySize::UserDefinition(definition) => match &definition.value {
+                        DefineValue::NumericLiteral(value) => match value {
+                            NumericLiteral::PositiveBinary(binary) => *binary,
+                            NumericLiteral::PositiveDecimal(decimal) => *decimal,
+                            NumericLiteral::PositiveHexadecimal(hexadecimal) => *hexadecimal,
+                            _ => panic!("Got \"{0:?}\" array size definition of an invalid type!", self.identifier)
                         },
-                        _ => panic!("Got \"{0}\" array size definition of an invalid type!", self.ident)
+                        _ => panic!("Got \"{0}\" array size definition of an invalid type!", self.identifier)
                     }
                 };
 
                 // Parse the byte size based on the array type
                 match *array_field_type.to_owned() {
-                    FieldType::Array(_, _)    => panic!("Nested arrays not allowed at the moment"),
+                    FieldType::Array(_, _) => panic!("Nested arrays not allowed at the moment"),
 
                     // Parse the user defined type using the member user_definition_link
                     FieldType::UserDefined(type_string) => match &self.user_definition_link {
-                        UserDefinitionLink::NoLink                                        => panic!("Could not find definition for type {0} while parsing C size", type_string),
+                        UserDefinitionLink::NoLink => panic!("Could not find definition for type {0} while parsing C size", type_string),
                         UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.primitive_c_size() * array_size,
-                        UserDefinitionLink::EnumLink(enum_definition)         => enum_definition.backing_type.primitive_c_size() * array_size,
-                        UserDefinitionLink::StructLink(struct_definition)     => {
-
-                            let mut struct_size = 0;
+                        UserDefinitionLink::EnumLink(enum_definition) => enum_definition.backing_type.primitive_c_size() * array_size,
+                        UserDefinitionLink::StructLink(struct_definition) => {
+                            let mut struct_size: u64 = 0;
 
                             // Call this function recursively for each struct member to get size
                             for member in &struct_definition.members {
@@ -362,25 +334,25 @@ impl CStructMember for StructMember {
                 }
             },
 
-            FieldType::UserDefined(name) => {
-                match &self.user_definition_link {
-                    UserDefinitionLink::NoLink                                                 => panic!("Found no definition link for item {0}!", name),
-                    UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.primitive_c_size(),
-                    UserDefinitionLink::EnumLink(enum_definition)             => enum_definition.backing_type.primitive_c_size(),
-                    UserDefinitionLink::StructLink(struct_definition)       => {
-                        let mut total_size = 0;
+            FieldType::UserDefined(name) => match &self.user_definition_link {
+                UserDefinitionLink::NoLink => {
+                    panic!("Found no definition link for item {0}!", name)
+                },
+                UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.primitive_c_size(),
+                UserDefinitionLink::EnumLink(enum_definition) => enum_definition.backing_type.primitive_c_size(),
+                UserDefinitionLink::StructLink(struct_definition) => {
+                    let mut total_size: u64 = 0;
 
-                        for member in &struct_definition.members {
-                            total_size += member.c_size();
-                        }
-
-                        total_size
+                    for member in &struct_definition.members {
+                        total_size += member.c_size();
                     }
+
+                    total_size
                 }
             },
 
             // Primitives
-            _ =>  self.field_type.primitive_c_size()
+            _ => self.data_type.primitive_c_size()
         }
     }
 }
@@ -389,7 +361,7 @@ impl CStructMember for StructMember {
 // ——————————————————————————
 
 pub trait CStructDefinition {
-    fn estimate_size(&self, configurations: &CompileConfigurations) -> usize;
+    fn estimate_size(&self, configurations: &CompileConfigurations) -> u64;
     fn sort_members(&self) -> Vec<StructMember>;
 }
 
@@ -404,10 +376,9 @@ impl CStructDefinition for StructDefinition {
         let mut aligned_1: Vec<StructMember> = Vec::with_capacity(0x20);
 
         for member in &self.members {
-
             // Zero-size members are discarded
             if member.c_size() == 0 {
-                continue
+                continue;
             }
 
             if member.c_size() % 8 == 0 {
@@ -426,7 +397,7 @@ impl CStructDefinition for StructDefinition {
         }
 
         // Size sort unaligned structs
-        aligned_1.sort_by(|a, b| b.c_size().cmp(&a.c_size()) );
+        aligned_1.sort_by(|a, b| b.c_size().cmp(&a.c_size()));
 
         full_list.append(&mut aligned_8);
         full_list.append(&mut aligned_4);
@@ -436,39 +407,38 @@ impl CStructDefinition for StructDefinition {
         full_list
     }
 
-    fn estimate_size(&self, configurations: &CompileConfigurations) -> usize {
+    fn estimate_size(&self, configurations: &CompileConfigurations) -> u64 {
         // println!("Estimating size of {0}", struct_definition.name);
 
         let struct_list: Vec<StructMember> = match configurations.sort {
-            true  => self.sort_members(),
+            true => self.sort_members(),
             false => self.members.clone()
         };
 
         // Calculate padding
-        let mut total_size:  usize = 0;
+        let mut total_size: u64 = 0;
 
         for member in &struct_list {
-            // println!("   {0} - {1} bytes", member.ident, member.c_size());
+            // println!("   {0} - {1} bytes", member.identifier, member.c_size());
 
             // Assume 8 byte alignment target for items > 4 bytes for worst case scenario
-            let member_alignment_size: usize = match member.c_size() {
+            let member_alignment_size: u64 = match member.c_size() {
                 // Members with a size 0 can be skipped
-                0     => continue,
-                1     => 1,
-                2     => 2,
+                0 => continue,
+                1 => 1,
+                2 => 2,
                 3..=4 => 4,
                 // Assume that anything bigger than 4 bytes needs to align to 8 bytes as a worst case scenario (64 bit targets)
-                5..   => 8
+                5.. => 8
             };
 
             // Estimate padding if packing disabled, and member does not align to the worst case 8 bytes (64 bit targets)
             if !configurations.pack_data && (total_size % member_alignment_size) != 0 {
                 // Add padding
-                let padding: usize = member_alignment_size - (total_size % member_alignment_size);
+                let padding: u64 = member_alignment_size - (total_size % member_alignment_size);
                 total_size += padding;
-                // println!("    > Estimated {0} bytes of padding for member \"{1}\"", padding, member.ident);
+                // println!("    > Estimated {0} bytes of padding for member \"{1}\"", padding, member.identifier);
             }
-
 
             total_size += member.c_size();
         }

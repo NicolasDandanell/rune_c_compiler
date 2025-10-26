@@ -1,50 +1,57 @@
-use crate::RuneFileDescription;
-use crate::c_utilities::{ CFieldType, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces };
-use crate::output_file::OutputFile;
-use rune_parser::types::{ BitfieldDefinition, BitfieldMember, BitSize, DefineDefinition, DefineValue, EnumDefinition, EnumValue, FieldType, StructDefinition, StructMember };
 use std::path::Path;
+
+use rune_parser::{
+    scanner::NumericLiteral,
+    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, FieldType, StructDefinition, StructMember}
+};
+
+use crate::{
+    RuneFileDescription,
+    c_utilities::{CFieldType, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    output_file::OutputFile
+};
 
 /// Outputs a bitfield definition into the header file
 fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldDefinition) {
     // Print comment if present
     match &bitfield_definition.comment {
-        Some(comment) =>  header_file.add_line(format!("/**{0}*/", comment)),
+        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
         None => ()
     }
 
     let bitfield_name: String = pascal_to_snake_case(&bitfield_definition.name);
 
     let mut little_endian_order: Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
-    let mut big_endian_order:    Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
+    let mut big_endian_order: Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
 
     // Get the backing type with signed and unsigned variants
     let backing_type: (FieldType, FieldType) = match bitfield_definition.backing_type {
-        FieldType::Byte  | FieldType::UByte  => (FieldType::UByte, FieldType::Byte),
+        FieldType::Byte | FieldType::UByte => (FieldType::UByte, FieldType::Byte),
         FieldType::Short | FieldType::UShort => (FieldType::UShort, FieldType::Short),
-        FieldType::Int   | FieldType::UInt   => (FieldType::UInt, FieldType::Int),
-        FieldType::Long  | FieldType::ULong  => (FieldType::ULong, FieldType::Long),
+        FieldType::Int | FieldType::UInt => (FieldType::UInt, FieldType::Int),
+        FieldType::Long | FieldType::ULong => (FieldType::ULong, FieldType::Long),
         _ => unreachable!("Only integer type primitives can back bitfields")
     };
 
     // Calculate required padding for ensuring proper alignment
-    let mut total_size: usize = 0;
+    let mut total_size: u64 = 0;
 
     for member in &bitfield_definition.members {
-        total_size += match member.bit_size {
-            BitSize::Signed(size)   => size,
+        total_size += match member.size {
+            BitSize::Signed(size) => size,
             BitSize::Unsigned(size) => size
         };
     }
 
     let padding: BitfieldMember = BitfieldMember {
-        ident:    String::from("padding"),
-        bit_size: BitSize::Unsigned((bitfield_definition.backing_type.primitive_c_size() * 8) - total_size),
-        bit_slot: 0, // Does not matter
-        comment:  Some(String::from(" Padding to ensure proper alignment "))
+        identifier: String::from("padding"),
+        size:       BitSize::Unsigned((bitfield_definition.backing_type.primitive_c_size() * 8) - total_size),
+        index:      0, // Does not matter
+        comment:    Some(String::from(" Padding to ensure proper alignment "))
     };
 
-    let padding_name_size: usize = match padding.bit_size {
-        BitSize::Signed(size)   => size,
+    let padding_name_size: u64 = match padding.size {
+        BitSize::Signed(size) => size,
         BitSize::Unsigned(size) => size
     };
 
@@ -55,7 +62,7 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
     };
 
     for member in &bitfield_definition.members {
-        let member_name = pascal_to_snake_case(&member.ident);
+        let member_name = pascal_to_snake_case(&member.identifier);
         if member_name.len() > longest_name {
             longest_name = member_name.len();
         }
@@ -78,9 +85,9 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
     }
 
     // Get little endian order
-    for i in 0..bitfield_definition.members.len() {
+    for i in 0..bitfield_definition.members.len() as u64 {
         for member in &bitfield_definition.members {
-            if member.bit_slot == i {
+            if member.index == i {
                 little_endian_order.push(member.clone());
             }
         }
@@ -91,20 +98,21 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
 
     // Print bits
     for member in little_endian_order.iter().enumerate() {
-
         // Member comment
         if member.1.comment.is_some() {
-            if member.0 != 0 { header_file.add_newline(); }
+            if member.0 != 0 {
+                header_file.add_newline();
+            }
             header_file.add_line(format!("    /**{0}*/", member.1.comment.as_ref().unwrap()));
         }
 
-        let member_name = pascal_to_snake_case(&member.1.ident);
+        let member_name = pascal_to_snake_case(&member.1.identifier);
 
         // Get bit size
-        let bit_size:       usize;
+        let bit_size: u64;
         let backing_string: String;
 
-        match member.1.bit_size {
+        match member.1.size {
             BitSize::Signed(size) => {
                 backing_string = format!("{0} ", backing_type.1.to_c_type());
                 bit_size = size;
@@ -115,12 +123,7 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
             }
         };
 
-        header_file.add_line(format!("    {0} {1}{2} : {3};",
-            backing_string,
-            member_name,
-            spaces(longest_name - member_name.len()),
-            bit_size
-        ));
+        header_file.add_line(format!("    {0} {1}{2} : {3};", backing_string, member_name, spaces(longest_name - member_name.len()), bit_size));
     }
 
     header_file.add_line(format!("}} {0}_t;", bitfield_name));
@@ -140,10 +143,10 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
     big_endian_order.push(padding.clone());
 
     // Get big endian order
-    for z in 0..bitfield_definition.members.len() {
-        let i = bitfield_definition.members.len() - 1 - z;
+    for z in 0..bitfield_definition.members.len() as u64 {
+        let i = bitfield_definition.members.len() as u64 - 1 - z;
         for member in &bitfield_definition.members {
-            if member.bit_slot == i {
+            if member.index == i {
                 big_endian_order.push(member.clone());
             }
         }
@@ -151,20 +154,21 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
 
     // Print bits
     for member in big_endian_order.iter().enumerate() {
-
         // Member comment
         if member.1.comment.is_some() {
-            if member.0 != 0 { header_file.add_newline(); }
+            if member.0 != 0 {
+                header_file.add_newline();
+            }
             header_file.add_line(format!("    /**{0}*/", member.1.comment.as_ref().unwrap()));
         }
 
-        let member_name: String = pascal_to_snake_case(&member.1.ident);
+        let member_name: String = pascal_to_snake_case(&member.1.identifier);
 
         // Get bit size
-        let bit_size:       usize;
+        let bit_size: u64;
         let backing_string: String;
 
-        match member.1.bit_size {
+        match member.1.size {
             BitSize::Signed(size) => {
                 backing_string = format!("{0} ", backing_type.1.to_c_type());
                 bit_size = size;
@@ -175,12 +179,7 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
             }
         };
 
-        header_file.add_line(format!("    {0} {1}{2} : {3};",
-            backing_string,
-            member_name,
-            spaces(longest_name - member_name.len()),
-            bit_size
-        ));
+        header_file.add_line(format!("    {0} {1}{2} : {3};", backing_string, member_name, spaces(longest_name - member_name.len()), bit_size));
     }
 
     header_file.add_line(format!("}} {0}_t;", bitfield_name));
@@ -204,16 +203,23 @@ fn output_bitfield(header_file: &mut OutputFile, bitfield_definition: &BitfieldD
 fn output_define(header_file: &mut OutputFile, define: &DefineDefinition) {
     // Print comment if present
     match &define.comment {
-        Some(comment) =>  header_file.add_line(format!("/**{0}*/", comment)),
+        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
         None => ()
     }
 
-    let define_name: String  = define.identifier.clone();
-    let define_value: String = match &define.value {
-        DefineValue::NoValue => String::from(""),
-        DefineValue::FloatLiteral(value)   => value.to_string(),
-        DefineValue::IntegerLiteral(value) => value.to_string(),
-        DefineValue::Composite(value)   => value.clone()
+    let define_name: String = define.name.clone();
+
+    let define_value: String = {
+        // Check if the value has been redefined. If so, use the redefined value
+        let value: &DefineValue = match &define.redefinition {
+            Some(redefine) => &redefine.value,
+            None => &define.value
+        };
+
+        match value {
+            DefineValue::NoValue => String::from(""),
+            DefineValue::NumericLiteral(value) => value.to_string()
+        }
     };
 
     header_file.add_line(format!("#define {0} {1}", define_name, define_value));
@@ -223,7 +229,7 @@ fn output_define(header_file: &mut OutputFile, define: &DefineDefinition) {
 fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
     // Print comment if present
     match &enum_definition.comment {
-        Some(comment) =>  header_file.add_line(format!("/**{0}*/", comment)),
+        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
         None => ()
     }
 
@@ -236,8 +242,8 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
 
     // Get longest name for spacing calculations
     for i in 0..enum_definition.members.len() {
-        if longest_member_name < pascal_to_uppercase(&enum_definition.members[i].ident).len() {
-            longest_member_name = pascal_to_uppercase(&enum_definition.members[i].ident).len();
+        if longest_member_name < pascal_to_uppercase(&enum_definition.members[i].identifier).len() {
+            longest_member_name = pascal_to_uppercase(&enum_definition.members[i].identifier).len();
         }
     }
 
@@ -245,20 +251,23 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
 
     // Print all enum members
     for i in 0..enum_definition.members.len() {
-
         let enum_member = &enum_definition.members[i];
 
         // Member comment
         if enum_member.comment.is_some() {
-            if i != 0 { header_file.add_newline(); }
+            if i != 0 {
+                header_file.add_newline();
+            }
             header_file.add_line(format!("    /**{0}*/", enum_member.comment.as_ref().unwrap()));
         }
 
-        let member_name: String = pascal_to_uppercase(&enum_member.ident);
+        let member_name: String = pascal_to_uppercase(&enum_member.identifier);
 
         let is_zero: bool = match enum_member.value {
-            EnumValue::IntegerLiteral(value) => value == 0,
-            EnumValue::FloatLiteral(value)   => value == 0.0,
+            NumericLiteral::Boolean(value) => value == false,
+            NumericLiteral::PositiveBinary(value) | NumericLiteral::PositiveDecimal(value) | NumericLiteral::PositiveHexadecimal(value) => value == 0,
+            NumericLiteral::NegativeBinary(value) | NumericLiteral::NegativeHexadecimal(value) | NumericLiteral::NegativeDecimal(value) => value == 0,
+            NumericLiteral::Float(value) => value == 0.0
         };
 
         if is_zero && (initializer_value == "0") {
@@ -267,10 +276,16 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
 
         let ending: String = match i == enum_definition.members.len() - 1 {
             false => String::from(","),
-            true  => String::from("")
+            true => String::from("")
         };
 
-        header_file.add_line(format!("    {0}{1} = {2}{3}", member_name, spaces(longest_member_name - member_name.len()), enum_member.value.to_string(), ending));
+        header_file.add_line(format!(
+            "    {0}{1} = {2}{3}",
+            member_name,
+            spaces(longest_member_name - member_name.len()),
+            enum_member.value.to_string(),
+            ending
+        ));
     }
 
     // Output enum definitions
@@ -286,7 +301,7 @@ fn output_enum(header_file: &mut OutputFile, enum_definition: &EnumDefinition) {
 fn output_struct(header_file: &mut OutputFile, struct_definition: &StructDefinition) -> Vec<StructMember> {
     // Print comment if present
     match &struct_definition.comment {
-        Some(comment) =>  header_file.add_line(format!("/**{0}*/", comment)),
+        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
         None => ()
     }
 
@@ -312,19 +327,20 @@ fn output_struct(header_file: &mut OutputFile, struct_definition: &StructDefinit
 
     // Print all struct members
     for i in 0..sorted_member_list.len() {
-
         let struct_member: &StructMember = &sorted_member_list[i];
 
         // Member comment
         if struct_member.comment.is_some() {
-            if i != 0 { header_file.add_newline(); }
+            if i != 0 {
+                header_file.add_newline();
+            }
             header_file.add_line(format!("    /**{0}*/", struct_member.comment.as_ref().unwrap()));
         }
 
-        let member_name: String = pascal_to_snake_case(&struct_member.ident);
-        let spacing: usize      = 0; // longest_type - sorted_member_list[i].field_type.to_c_type().len();
+        let member_name: String = pascal_to_snake_case(&struct_member.identifier);
+        let spacing: usize = 0; // longest_type - sorted_member_list[i].field_type.to_c_type().len();
 
-        header_file.add_line(format!("    {0};", struct_member.field_type.create_c_variable(&member_name, spacing)));
+        header_file.add_line(format!("    {0};", struct_member.data_type.create_c_variable(&member_name, spacing)));
     }
 
     header_file.add_line(format!("}} {0}_t;", struct_name));
@@ -334,7 +350,7 @@ fn output_struct(header_file: &mut OutputFile, struct_definition: &StructDefinit
 }
 
 fn output_struct_initializer(output_file: &mut OutputFile, struct_definition: &StructDefinition) {
-    let mut pre_equal_length: usize   = 0;
+    let mut pre_equal_length: usize = 0;
 
     let sorted_member_list: Vec<StructMember> = struct_definition.sort_members();
 
@@ -342,22 +358,27 @@ fn output_struct_initializer(output_file: &mut OutputFile, struct_definition: &S
     // ————————————————————————————————————————————
 
     for member in &sorted_member_list {
-        if member.ident.len() > pre_equal_length {
-            pre_equal_length = member.ident.len();
+        if member.identifier.len() > pre_equal_length {
+            pre_equal_length = member.identifier.len();
         }
     }
 
     // Calculate the space for aligning the '\' at the end
     // ————————————————————————————————————————————————————
 
-    let initializer_string: String = format!("#define {0}_INIT ({1}) {{{2}", pascal_to_uppercase(&struct_definition.name), format!("{0}_t", pascal_to_snake_case(&struct_definition.name)), spaces(0));
+    let initializer_string: String = format!(
+        "#define {0}_INIT ({1}) {{{2}",
+        pascal_to_uppercase(&struct_definition.name),
+        format!("{0}_t", pascal_to_snake_case(&struct_definition.name)),
+        spaces(0)
+    );
     let mut pre_newline_length: usize = initializer_string.len(); // - 2
 
     // Calculate spacing for after the newline
     for member in &sorted_member_list {
-        let pre_equal: usize = pre_equal_length - member.ident.len();
+        let pre_equal: usize = pre_equal_length - member.identifier.len();
 
-        let string: String = format!("    .{0}{1} = {2}, {3}\\", member.ident, spaces(pre_equal), member.field_type.c_initializer(), "");
+        let string: String = format!("    .{0}{1} = {2}, {3}\\", member.identifier, spaces(pre_equal), member.data_type.c_initializer(), "");
 
         // I don't know why the -2 is needed, but it does not work without it
         if string.len() - 2 > pre_newline_length {
@@ -368,19 +389,29 @@ fn output_struct_initializer(output_file: &mut OutputFile, struct_definition: &S
     // 20 seems to be the number of fixed characters on the define string
     let define_size: usize = 20 + pascal_to_uppercase(&struct_definition.name).len() + pascal_to_snake_case(&struct_definition.name).len();
 
-    output_file.add_line(format!("#define {0}_INIT ({1}_t) {{ {2}\\", pascal_to_uppercase(&struct_definition.name), pascal_to_snake_case(&struct_definition.name), spaces(pre_newline_length -  define_size)));
+    output_file.add_line(format!(
+        "#define {0}_INIT ({1}_t) {{ {2}\\",
+        pascal_to_uppercase(&struct_definition.name),
+        pascal_to_snake_case(&struct_definition.name),
+        spaces(pre_newline_length - define_size)
+    ));
     for member in sorted_member_list {
-        let pre_equal: usize   = pre_equal_length - member.ident.len();
-        let pre_newline: usize = pre_newline_length - pre_equal_length - member.field_type.c_initializer().len() - 9;
+        let pre_equal: usize = pre_equal_length - member.identifier.len();
+        let pre_newline: usize = pre_newline_length - pre_equal_length - member.data_type.c_initializer().len() - 9;
 
-        output_file.add_line(format!("    .{0}{1} = {2}, {3}\\", member.ident, spaces(pre_equal), member.field_type.c_initializer(), spaces(pre_newline)));
+        output_file.add_line(format!(
+            "    .{0}{1} = {2}, {3}\\",
+            member.identifier,
+            spaces(pre_equal),
+            member.data_type.c_initializer(),
+            spaces(pre_newline)
+        ));
     }
     output_file.add_line(format!("}}"));
     output_file.add_newline();
 }
 
 pub fn output_header(file: &RuneFileDescription, output_path: &Path) {
-
     // Print disclaimers. Requires C23 compliant compiler
     //
     // · Autogenerated code info
@@ -399,12 +430,14 @@ pub fn output_header(file: &RuneFileDescription, output_path: &Path) {
     //
     // —————————————————————————————————————————————————
 
-    let h_file_string: String = format!("{0}{1}.rune.h",
+    let h_file_string: String = format!(
+        "{0}{1}.rune.h",
         match file.relative_path.is_empty() {
-            true  => String::new(),
+            true => String::new(),
             false => format!("/{0}", file.relative_path)
         },
-        file.file_name);
+        file.file_name
+    );
 
     let mut header_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), h_file_string);
 
@@ -497,5 +530,4 @@ pub fn output_header(file: &RuneFileDescription, output_path: &Path) {
     // ————————————
 
     header_file.output_file();
-
 }
