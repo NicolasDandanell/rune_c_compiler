@@ -1,7 +1,8 @@
-use crate::c_utilities::pascal_to_snake_case;
-use crate::output_file::OutputFile;
-use rune_parser::{ types::StructDefinition, RuneFileDescription };
 use std::path::Path;
+
+use rune_parser::{RuneFileDescription, types::StructDefinition};
+
+use crate::{c_utilities::pascal_to_snake_case, output_file::OutputFile};
 
 pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: &Path) {
     let parser_file_string: String = String::from("runic_parser.c");
@@ -19,7 +20,6 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: 
 
     // Sort the list alphabetically
     struct_definitions.sort_by(|a, b| a.name.to_ascii_uppercase().cmp(&b.name.to_ascii_uppercase()));
-
 
     // Disclaimers
     // ————————————
@@ -51,7 +51,7 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: 
     for i in 0..struct_definitions.len() {
         let end: String = match i == struct_definitions.len() - 1 {
             false => String::from(","),
-            true  => String::new()
+            true => String::new()
         };
 
         parser_file.add_line(format!("    &{0}_parser{1}", pascal_to_snake_case(&struct_definitions[i].name), end));

@@ -5,10 +5,12 @@ mod parser;
 mod runic_definitions;
 mod source;
 
+use std::{fs::create_dir, path::Path};
+
 use clap::Parser;
-use crate::{ c_utilities::CConfigurations, header::output_header, parser::output_parser, runic_definitions::output_runic_definitions, source::output_source };
-use rune_parser::{ parser_rune_files, RuneFileDescription };
-use std::{ fs::create_dir, path::Path };
+use rune_parser::{RuneFileDescription, parser_rune_files};
+
+use crate::{c_utilities::CConfigurations, header::output_header, parser::output_parser, runic_definitions::output_runic_definitions, source::output_source};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -54,14 +56,13 @@ pub struct CompileConfigurations {
 }
 
 fn main() -> Result<(), usize> {
-
     // Parse arguments
     // ————————————————
 
     let args: Args = Args::parse();
 
-    let input_path: &Path                     = Path::new(args.input_folder.as_str());
-    let output_path: &Path                    = Path::new(args.output_folder.as_str());
+    let input_path: &Path = Path::new(args.input_folder.as_str());
+    let output_path: &Path = Path::new(args.output_folder.as_str());
     let configurations: CompileConfigurations = CompileConfigurations {
         pack_data:     args.pack_data,
         pack_metadata: args.pack_metadata,
@@ -85,9 +86,9 @@ fn main() -> Result<(), usize> {
         }
     }
 
-    let definitions_list: Vec<RuneFileDescription> = match parser_rune_files(input_path) {
+    let definitions_list: Vec<RuneFileDescription> = match parser_rune_files(input_path, true, false) {
         Ok(value) => value,
-        Err(error)         => panic!("Could not parser Rune files! Got error {0:?}", error)
+        Err(error) => panic!("Could not parser Rune files! Got error {0:?}", error)
     };
 
     // Create source files
@@ -99,7 +100,6 @@ fn main() -> Result<(), usize> {
 }
 
 pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: &Path, configurations: CompileConfigurations) {
-
     let c_configurations: CConfigurations = CConfigurations::parse(&file_descriptions, &configurations);
 
     // Create runic definitions file
