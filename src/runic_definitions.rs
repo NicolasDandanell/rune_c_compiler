@@ -1,23 +1,34 @@
 use std::path::Path;
 
-use rune_parser::{RuneFileDescription, types::StructDefinition};
+use rune_parser::{
+    RuneFileDescription,
+    types::{FieldType, StructDefinition}
+};
 
 use crate::{
-    c_utilities::{CConfigurations, pascal_to_uppercase, spaces},
+    c_standard::CStandard,
+    c_utilities::{CConfigurations, CFieldType, pascal_to_uppercase, spaces},
+    compile_error::CompilerError,
+    output::*,
     output_file::OutputFile
 };
 
-fn type_from_size(size: usize) -> String {
+fn type_from_size(size: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
     match size {
-        1 => String::from("uint8_t"),
-        2 => String::from("uint16_t"),
-        4 => String::from("uint32_t"),
-        8 => String::from("uint64_t"),
-        _ => panic!("Invalid type size given!")
+        1 => FieldType::UByte.to_c_type(c_standard),
+        2 => FieldType::UShort.to_c_type(c_standard),
+        4 => FieldType::UInt.to_c_type(c_standard),
+        8 => FieldType::ULong.to_c_type(c_standard),
+        _ => {
+            error!("Invalid type size given! This should not be possible");
+            return Err(CompilerError::LogicError);
+        }
     }
 }
 
-pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) {
+pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
+    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
+
     let mut bitfield_attributes: String = String::with_capacity(0x100);
     let enum_attributes: String = String::with_capacity(0x100);
     let mut parser_attributes: String = String::with_capacity(0x100);
@@ -166,29 +177,36 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!(
         "#define RUNE_FIELD_SIZE_TYPE   {0}",
         match configurations.compiler_configurations.pack_metadata {
-            true => type_from_size(configurations.field_size_type_size),
+            true => type_from_size(configurations.field_size_type_size, c_standard)?,
             false => String::from("size_t")
         }
     ));
     definitions_file.add_line(format!(
         "#define RUNE_FIELD_OFFSET_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
-            true => type_from_size(configurations.field_offset_type_size),
+            true => type_from_size(configurations.field_offset_type_size, c_standard)?,
             false => String::from("size_t")
         }
     ));
     definitions_file.add_line(format!(
         "#define RUNE_MESSAGE_SIZE_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
-            true => type_from_size(configurations.message_size_type_size),
+            true => type_from_size(configurations.message_size_type_size, c_standard)?,
             false => String::from("size_t")
         }
     ));
     definitions_file.add_line(format!(
         "#define RUNE_PARSER_INDEX_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
-            true => type_from_size(configurations.parser_index_type_size),
+            true => type_from_size(configurations.parser_index_type_size, c_standard)?,
             false => String::from("size_t")
+        }
+    ));
+    definitions_file.add_line(format!(
+        "#define RUNE_FIELD_INFO_COUNT {0}",
+        match c_standard.allows_flexible_array_members() {
+            true => String::new(),
+            false => (configurations.largest_message_index + 1).to_string()
         }
     ));
     definitions_file.add_newline();
@@ -225,5 +243,5 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
 
     definitions_file.add_line(format!("#endif // RUNIC_DEFINITIONS_H"));
 
-    definitions_file.output_file();
+    definitions_file.output_file()
 }
