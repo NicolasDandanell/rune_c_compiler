@@ -8,6 +8,7 @@ use rune_parser::{
 use crate::{
     c_standard::CStandard,
     c_utilities::{CConfigurations, CFieldType, pascal_to_uppercase, spaces},
+    compile_error::CompilerError,
     output_file::OutputFile
 };
 
@@ -21,7 +22,7 @@ fn type_from_size(size: usize, c_standard: &CStandard) -> String {
     }
 }
 
-pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) {
+pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
     let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
 
     let mut bitfield_attributes: String = String::with_capacity(0x100);
@@ -238,5 +239,5 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
 
     definitions_file.add_line(format!("#endif // RUNIC_DEFINITIONS_H"));
 
-    definitions_file.output_file();
+    definitions_file.output_file()
 }

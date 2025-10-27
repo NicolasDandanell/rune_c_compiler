@@ -2,6 +2,7 @@ mod c_standard;
 mod c_utilities;
 mod compile_error;
 mod header;
+#[macro_use]
 mod output;
 mod output_file;
 mod parser;
@@ -103,7 +104,7 @@ fn main() -> Result<(), CompilerError> {
         match create_dir(output_path) {
             Err(error) => {
                 error!("Cannot create directory {0:?}. Got error {1}", output_path, error);
-                return Err(CompilerError::FileSystemError);
+                return Err(CompilerError::FileSystemError(error));
             },
             Ok(()) => ()
         }
@@ -113,24 +114,22 @@ fn main() -> Result<(), CompilerError> {
         Ok(value) => value,
         Err(error) => {
             error!("Could not parser Rune files! Got error {0:?}", error);
-            return Err(CompilerError::FileSystemError);
+            return Err(CompilerError::ParsingError(error));
         }
     };
 
     // Create source files
     // ————————————————————
 
-    output_c_files(definitions_list, output_path, configurations);
-
-    Ok(())
+    output_c_files(definitions_list, output_path, configurations)
 }
 
-pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: &Path, configurations: CompileConfigurations) {
+pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: &Path, configurations: CompileConfigurations) -> Result<(), CompilerError> {
     let c_configurations: CConfigurations = CConfigurations::parse(&file_descriptions, &configurations);
 
     // Create runic definitions file
     info!("Outputting runic definitions");
-    output_runic_definitions(&file_descriptions, &c_configurations, output_path);
+    output_runic_definitions(&file_descriptions, &c_configurations, output_path)?;
 
     // Create source and header files matching the Rune files
     info!("Outputting headers and sources for:");
@@ -138,15 +137,16 @@ pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: 
         info!("    {0}{1}.rune", file.relative_path, file.file_name);
 
         // Create header file
-        output_header(&file, &c_configurations, output_path);
+        output_header(&file, &c_configurations, output_path)?;
 
         // Create source file
-        output_source(&file, &c_configurations, output_path);
+        output_source(&file, &c_configurations, output_path)?;
     }
 
     // Create parser
     info!("Outputting parser file");
-    output_parser(&file_descriptions, &c_configurations, output_path);
+    output_parser(&file_descriptions, &c_configurations, output_path)?;
 
     info!("Rune C compiler is done!");
+    Ok(())
 }

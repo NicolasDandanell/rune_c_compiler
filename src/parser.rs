@@ -5,10 +5,11 @@ use rune_parser::{RuneFileDescription, types::StructDefinition};
 use crate::{
     c_standard::CStandard,
     c_utilities::{CConfigurations, pascal_to_snake_case},
+    compile_error::CompilerError,
     output_file::OutputFile
 };
 
-pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) {
+pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
     let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
 
     let parser_file_string: String = String::from("runic_parser.c");
@@ -80,5 +81,5 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configuration
     parser_file.add_line(String::from("    return parser_array[index];"));
     parser_file.add_line(String::from("}"));
 
-    parser_file.output_file();
+    parser_file.output_file()
 }
