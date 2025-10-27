@@ -6,6 +6,11 @@ use rune_parser::RuneParserError;
 pub enum CompilerError {
     InvalidArgument,
     InvalidInputPath,
+    ConfigurationError,
+    SourceAndCStandardMismatch,
     ParsingError(RuneParserError),
+    LogicError,
+    MalformedSource,
+    UnsupportedFeature,
     FileSystemError(Error)
 }

@@ -22,6 +22,17 @@ impl CStandard {
         }
     }
 
+    pub fn to_string(&self) -> String {
+        match self {
+            CStandard::C89 => String::from("C89"),
+            CStandard::C95 => String::from("C95"),
+            CStandard::C99 => String::from("C99"),
+            CStandard::C11 => String::from("C11"),
+            CStandard::C17 => String::from("C17"),
+            CStandard::C23 => String::from("C23")
+        }
+    }
+
     pub fn valid_values() -> String {
         String::from("C89/C90, C95, C99, C11, C17, C23")
     }

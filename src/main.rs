@@ -1,9 +1,11 @@
+#[macro_use]
+// Declare first because of macros
+mod output;
+
 mod c_standard;
 mod c_utilities;
 mod compile_error;
 mod header;
-#[macro_use]
-mod output;
 mod output_file;
 mod parser;
 mod runic_definitions;
@@ -125,7 +127,7 @@ fn main() -> Result<(), CompilerError> {
 }
 
 pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: &Path, configurations: CompileConfigurations) -> Result<(), CompilerError> {
-    let c_configurations: CConfigurations = CConfigurations::parse(&file_descriptions, &configurations);
+    let c_configurations: CConfigurations = CConfigurations::parse(&file_descriptions, &configurations)?;
 
     // Create runic definitions file
     info!("Outputting runic definitions");

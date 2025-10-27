@@ -89,7 +89,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
         for i in 0..member_count {
             // Empty definition that will be used if index not found in struct list
-            let mut member: StructMember = StructMember::index_empty(i);
+            let mut member: StructMember = StructMember::index_empty(i)?;
 
             // Try to find member with index i
             for listed_member in &struct_definition.members {
@@ -162,7 +162,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 true => ' '
             };
 
-            let size_string: String = index_sorted_members[i].c_size_definition(c_standard);
+            let size_string: String = index_sorted_members[i].c_size_definition(c_standard)?;
 
             let verification_string: String = match has_verification && i == 0 {
                 false => String::from(""),
