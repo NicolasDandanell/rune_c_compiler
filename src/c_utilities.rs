@@ -4,7 +4,7 @@ use rune_parser::{
     types::{ArraySize, DefineValue, FieldIndex, FieldType, StructDefinition, StructMember, UserDefinitionLink}
 };
 
-use crate::CompileConfigurations;
+use crate::c_standard::CStandard;
 
 // String helper functions
 // ————————————————————————
@@ -57,6 +57,24 @@ pub fn pascal_to_uppercase(pascal: &String) -> String {
 // C Configuration
 // ————————————————
 
+#[derive(Debug, Clone)]
+pub struct CompileConfigurations {
+    /// Whether or not to pack message data structures
+    pub pack_data: bool,
+
+    /// Whether or not to pack parsing metadata structures
+    pub pack_metadata: bool,
+
+    /// Whether to declare all rune data in a specific section - Default to None
+    pub section: Option<String>,
+
+    /// Whether to size sort structs to optimize packing - Defaults to true
+    pub sort: bool,
+
+    /// Specifies which C standard the output source should comply with
+    pub c_standard: CStandard
+}
+
 pub struct CConfigurations {
     // Configurations
     pub compiler_configurations: CompileConfigurations,
@@ -65,24 +83,34 @@ pub struct CConfigurations {
     pub field_size_type_size:   usize,
     pub field_offset_type_size: usize,
     pub message_size_type_size: usize,
-    pub parser_index_type_size: usize
+    pub parser_index_type_size: usize,
+
+    // Largest encountered declared message index
+    pub largest_message_index: usize
 }
 
 impl CConfigurations {
     pub fn parse(file_descriptions: &Vec<RuneFileDescription>, configurations: &CompileConfigurations) -> CConfigurations {
-        let mut amount_of_messages: u64 = 0;
-        let mut largest_message_size: u64 = 0;
+        let mut amount_of_messages: usize = 0;
+        let mut largest_message_size: usize = 0;
+        let mut largest_message_index: usize = 0;
 
         // Get the largest overall message size, and the amount of messages
         for file in file_descriptions {
             // Add struct definition amount to amount of messages
-            amount_of_messages += file.definitions.structs.len() as u64;
+            amount_of_messages += file.definitions.structs.len();
 
             for struct_definition in &file.definitions.structs {
-                let estimated_size: u64 = struct_definition.estimate_size(configurations);
+                let estimated_size: usize = struct_definition.estimate_size(configurations) as usize;
 
                 if estimated_size > largest_message_size {
                     largest_message_size = estimated_size;
+                }
+
+                for member in &struct_definition.members {
+                    if member.index.value() as usize > largest_message_index {
+                        largest_message_index = member.index.value() as usize;
+                    }
                 }
             }
         }
@@ -116,7 +144,33 @@ impl CConfigurations {
             field_size_type_size,
             field_offset_type_size,
             message_size_type_size,
-            parser_index_type_size
+            parser_index_type_size,
+            largest_message_index
+        }
+    }
+}
+
+// Numeric value helper functions
+// ———————————————————————————————
+
+pub trait CNumericValue {
+    fn requires_size(&self) -> u64;
+}
+
+impl CNumericValue for NumericLiteral {
+    fn requires_size(&self) -> u64 {
+        let leading_zeroes = match self {
+            NumericLiteral::Boolean(_) => return 1,
+            NumericLiteral::PositiveBinary(value) | NumericLiteral::PositiveDecimal(value) | NumericLiteral::PositiveHexadecimal(value) => value.leading_zeros() / 8,
+            NumericLiteral::NegativeBinary(value) | NumericLiteral::NegativeDecimal(value) | NumericLiteral::NegativeHexadecimal(value) => value.leading_zeros() / 8,
+            NumericLiteral::Float(value) => value.to_bits().leading_zeros() / 8
+        };
+
+        match leading_zeroes {
+            0..4 => 8,
+            4..6 => 4,
+            6..7 => 2,
+            7.. => 1
         }
     }
 }
@@ -125,60 +179,87 @@ impl CConfigurations {
 // ———————————————————
 
 pub trait CFieldType {
-    fn c_initializer(&self) -> String;
-    fn create_c_variable(&self, name: &String, spacing: usize) -> String;
+    fn c_initializer(&self, c_standard: &CStandard) -> String;
+    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> String;
     fn primitive_c_size(&self) -> u64;
-    fn to_c_type(&self) -> String;
+    fn to_c_type(&self, c_standard: &CStandard) -> String;
 }
 
 impl CFieldType for FieldType {
-    fn to_c_type(&self) -> String {
+    fn to_c_type(&self, c_standard: &CStandard) -> String {
         match self {
-            FieldType::Boolean => String::from("bool"),
-            FieldType::Char => String::from("char"),
-            FieldType::UByte => String::from("uint8_t"),
-            FieldType::Byte => String::from("int8_t"),
+            FieldType::Boolean => String::from(match c_standard.allows_boolean() {
+                true => "bool",
+                false => "char"
+            }),
 
-            FieldType::UShort => String::from("uint16_t"),
-            FieldType::Short => String::from("int16_t"),
+            FieldType::Char => String::from("char"),
+
+            FieldType::UByte => String::from(match c_standard.allows_integer_types() {
+                true => "uint8_t",
+                false => "unsigned char"
+            }),
+            FieldType::Byte => String::from(match c_standard.allows_integer_types() {
+                true => "int8_t",
+                false => "signed char"
+            }),
+
+            FieldType::UShort => String::from(match c_standard.allows_integer_types() {
+                true => "uint16_t",
+                false => "unsigned short"
+            }),
+            FieldType::Short => String::from(match c_standard.allows_integer_types() {
+                true => "int16_t",
+                false => "signed short"
+            }),
+
+            FieldType::UInt => String::from(match c_standard.allows_integer_types() {
+                true => "uint32_t",
+                false => "unsigned long"
+            }),
+            FieldType::Int => String::from(match c_standard.allows_integer_types() {
+                true => "int32_t",
+                false => "signed long"
+            }),
+
+            FieldType::ULong => String::from(match c_standard.allows_integer_types() {
+                true => "uint64_t",
+                false => panic!("Cannot guarantee 64 bit integers before C99 standard!")
+            }),
+            FieldType::Long => String::from(match c_standard.allows_integer_types() {
+                true => "int64_t",
+                false => panic!("Cannot guarantee 64 bit integers before C99 standard!")
+            }),
 
             FieldType::Float => String::from("float"),
-            FieldType::UInt => String::from("uint32_t"),
-            FieldType::Int => String::from("int32_t"),
-
             FieldType::Double => String::from("double"),
-            FieldType::ULong => String::from("uint64_t"),
-            FieldType::Long => String::from("int64_t"),
 
             FieldType::UserDefined(string) => format!("{0}_t", pascal_to_snake_case(string)),
 
             // This will return the string of the underlying type
-            FieldType::Array(underlying_type, _) => underlying_type.to_c_type(),
+            FieldType::Array(underlying_type, _) => underlying_type.to_c_type(c_standard),
 
             FieldType::Empty => panic!("Empty fields have no type!")
         }
     }
 
-    fn create_c_variable(&self, name: &String, spacing: usize) -> String {
+    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> String {
         match self {
-            FieldType::Boolean => format!("bool {0}{1}", spaces(spacing), name),
-            FieldType::Char => format!("char {0}{1}", spaces(spacing), name),
-            FieldType::UByte => format!("uint8_t {0}{1}", spaces(spacing), name),
-            FieldType::Byte => format!("int8_t {0}{1}", spaces(spacing), name),
-
-            FieldType::UShort => format!("uint16_t {0}{1}", spaces(spacing), name),
-            FieldType::Short => format!("int16_t {0}{1}", spaces(spacing), name),
-
-            FieldType::Float => format!("float {0}{1}", spaces(spacing), name),
-            FieldType::UInt => format!("uint32_t {0}{1}", spaces(spacing), name),
-            FieldType::Int => format!("int32_t {0}{1}", spaces(spacing), name),
-
-            FieldType::Double => format!("double {0}{1}", spaces(spacing), name),
-            FieldType::ULong => format!("uint64_t {0}{1}", spaces(spacing), name),
-            FieldType::Long => format!("int64_t {0}{1}", spaces(spacing), name),
+            FieldType::Boolean
+            | FieldType::Char
+            | FieldType::UByte
+            | FieldType::Byte
+            | FieldType::UShort
+            | FieldType::Short
+            | FieldType::Float
+            | FieldType::UInt
+            | FieldType::Int
+            | FieldType::Double
+            | FieldType::ULong
+            | FieldType::Long => format!("{0} {1}{2}", self.to_c_type(c_standard), spaces(spacing), name),
 
             FieldType::UserDefined(string) => format!("{0}_t {1}{2}", pascal_to_snake_case(string), spaces(spacing), name),
-            FieldType::Array(field_type, field_size) => format!("{0} {1}{2}[{3}]", field_type.to_c_type(), spaces(spacing), name, field_size.to_string()),
+            FieldType::Array(field_type, field_size) => format!("{0} {1}{2}[{3}]", field_type.to_c_type(c_standard), spaces(spacing), name, field_size.to_string()),
             FieldType::Empty => panic!("Cannot create an empty field!")
         }
     }
@@ -207,9 +288,12 @@ impl CFieldType for FieldType {
         }
     }
 
-    fn c_initializer(&self) -> String {
+    fn c_initializer(&self, c_standard: &CStandard) -> String {
         match self {
-            FieldType::Boolean => String::from("false"),
+            FieldType::Boolean => match c_standard.allows_boolean() {
+                true => String::from("false"),
+                false => String::from("0")
+            },
             FieldType::Char => String::from("0"),
             FieldType::Byte => String::from("0"),
             FieldType::UByte => String::from("0"),
@@ -223,9 +307,8 @@ impl CFieldType for FieldType {
             FieldType::ULong => String::from("0"),
             FieldType::Empty => panic!("Cannot initialize an empty field!"),
             FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
-            FieldType::Array(field_type, array_size) => format!(
-                "{{ [0 ... {0}] = {1} }}",
-                array_size.last_index_string(),
+            FieldType::Array(field_type, _) => format!(
+                "{{ {0} }}",
                 match field_type.as_ref() {
                     FieldType::Boolean => String::from("false"),
                     FieldType::Char | FieldType::Byte | FieldType::UByte | FieldType::Short | FieldType::UShort | FieldType::Int | FieldType::UInt | FieldType::Long | FieldType::ULong =>
@@ -245,7 +328,7 @@ impl CFieldType for FieldType {
 
 pub trait CStructMember {
     fn c_size(&self) -> u64;
-    fn c_size_definition(&self) -> String;
+    fn c_size_definition(&self, standard: &CStandard) -> String;
     fn index_empty(index: u64) -> StructMember;
 }
 
@@ -268,7 +351,7 @@ impl CStructMember for StructMember {
         }
     }
 
-    fn c_size_definition(&self) -> String {
+    fn c_size_definition(&self, standard: &CStandard) -> String {
         let size_string: String = match &self.data_type {
             FieldType::UserDefined(type_name) => {
                 format!("sizeof({0}_t)", pascal_to_snake_case(&type_name))
@@ -279,13 +362,13 @@ impl CStructMember for StructMember {
                     FieldType::UserDefined(name) => {
                         format!("sizeof({0}_t)", pascal_to_snake_case(&name))
                     },
-                    _ => format!("sizeof({0})", array_type.to_c_type())
+                    _ => format!("sizeof({0})", array_type.to_c_type(standard))
                 };
 
                 format!("({0} * {1})", type_string, array_size.to_string())
             },
             FieldType::Empty => String::from("0"),
-            _ => format!("sizeof({0})", self.data_type.to_c_type())
+            _ => format!("sizeof({0})", self.data_type.to_c_type(standard))
         };
         size_string
     }

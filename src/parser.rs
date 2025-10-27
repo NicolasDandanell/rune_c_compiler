@@ -2,9 +2,15 @@ use std::path::Path;
 
 use rune_parser::{RuneFileDescription, types::StructDefinition};
 
-use crate::{c_utilities::pascal_to_snake_case, output_file::OutputFile};
+use crate::{
+    c_standard::CStandard,
+    c_utilities::{CConfigurations, pascal_to_snake_case},
+    output_file::OutputFile
+};
 
-pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: &Path) {
+pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) {
+    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
+
     let parser_file_string: String = String::from("runic_parser.c");
 
     let mut parser_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), parser_file_string);
@@ -63,9 +69,15 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, output_path: 
     // Get parser function
     // ————————————————————
 
-    parser_file.add_line(String::from("/** Get the parser struct of a given message type from its index */"));
-    parser_file.add_line(String::from("inline rune_message_info_t* get_parser(RUNE_PARSER_INDEX_TYPE index) {"));
-    parser_file.add_line(String::from("    return parser_array[index - 1];"));
+    parser_file.add_line(String::from("/** Get the parser struct of a given message type from its parser index */"));
+    parser_file.add_line(format!(
+        "{0}rune_message_info_t* get_parser(RUNE_PARSER_INDEX_TYPE index) {{",
+        match c_standard.allows_inline() {
+            true => "inline ",
+            false => ""
+        }
+    ));
+    parser_file.add_line(String::from("    return parser_array[index];"));
     parser_file.add_line(String::from("}"));
 
     parser_file.output_file();

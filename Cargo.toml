@@ -12,5 +12,5 @@ name = "rune_c_compiler"
 path = "src/main.rs"
 
 [dependencies]
-clap        = { version = "4.5.41", features = ["derive"] }
+clap        = { version = "4.5.50", features = ["derive"] }
 rune_parser = { version = "0.5.0" }
