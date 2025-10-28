@@ -113,7 +113,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
         // check for allows_designated_initializers
 
         source_file.add_newline();
-        source_file.add_line(format!("rune_message_parser_t RUNIC_PARSER {0}_parser = {{", struct_name));
+        source_file.add_line(format!("const rune_descriptor_t RUNIC_PARSER {0}_descriptor = {{", struct_name));
 
         let comment_start: &'static str;
         let comment_end: &'static str;
@@ -195,9 +195,9 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 verification_string,
                 i
             ));
-            source_file.add_line(format!("    {0}        .field_offset       ={1} {2},", comment_start, comment_end, offset_string));
-            source_file.add_line(format!("    {0}        .field_size         ={1} {2},", comment_start, comment_end, size_string));
-            source_file.add_line(format!("    {0}        .parser_array_index ={1} {2}", comment_start, comment_end, parser_index_string));
+            source_file.add_line(format!("    {0}        .offset.      ={1} {2},", comment_start, comment_end, offset_string));
+            source_file.add_line(format!("    {0}        .size.        ={1} {2},", comment_start, comment_end, size_string));
+            source_file.add_line(format!("    {0}        .parser_index ={1} {2}", comment_start, comment_end, parser_index_string));
 
             source_file.add_line(format!("        }}{0}", end));
         }

@@ -3,15 +3,12 @@ use std::path::Path;
 use rune_parser::{RuneFileDescription, types::StructDefinition};
 
 use crate::{
-    c_standard::CStandard,
     c_utilities::{CConfigurations, pascal_to_snake_case},
     compile_error::CompilerError,
     output_file::OutputFile
 };
 
-pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
-    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
-
+pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, _configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
     let parser_file_string: String = String::from("runic_parser.c");
 
     let mut parser_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), parser_file_string);
@@ -44,7 +41,7 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configuration
 
     if !struct_definitions.is_empty() {
         for i in 0..struct_definitions.len() {
-            parser_file.add_line(format!("extern rune_message_info_t {0}_parser;", pascal_to_snake_case(&struct_definitions[i].name)));
+            parser_file.add_line(format!("extern rune_descriptor_t {0}_descriptor;", pascal_to_snake_case(&struct_definitions[i].name)));
         }
         parser_file.add_newline();
     }
@@ -53,7 +50,7 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configuration
     // ———————
 
     // Define parser array
-    parser_file.add_line(String::from("static rune_message_info_t* PROTOCOL parser_array[RUNE_PARSER_COUNT] = {"));
+    parser_file.add_line(String::from("static rune_descriptor_t* RUNIC_PARSER parser_array[RUNE_PARSER_COUNT] = {"));
 
     for i in 0..struct_definitions.len() {
         let end: String = match i == struct_definitions.len() - 1 {
@@ -61,25 +58,11 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, configuration
             true => String::new()
         };
 
-        parser_file.add_line(format!("    &{0}_parser{1}", pascal_to_snake_case(&struct_definitions[i].name), end));
+        parser_file.add_line(format!("    &{0}_descriptor{1}", pascal_to_snake_case(&struct_definitions[i].name), end));
     }
 
     parser_file.add_line(String::from("};"));
     parser_file.add_newline();
-
-    // Get parser function
-    // ————————————————————
-
-    parser_file.add_line(String::from("/** Get the parser struct of a given message type from its parser index */"));
-    parser_file.add_line(format!(
-        "{0}rune_message_info_t* get_parser(RUNE_PARSER_INDEX_TYPE index) {{",
-        match c_standard.allows_inline() {
-            true => "inline ",
-            false => ""
-        }
-    ));
-    parser_file.add_line(String::from("    return parser_array[index];"));
-    parser_file.add_line(String::from("}"));
 
     parser_file.output_file()
 }

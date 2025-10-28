@@ -398,6 +398,9 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
     header_file.add_line(format!("}} {0}_t;", struct_name));
     header_file.add_newline();
 
+    header_file.add_line(format!("extern const rune_descriptor_t {0}_descriptor;", struct_name));
+    header_file.add_newline();
+
     Ok(sorted_member_list)
 }
 
@@ -512,6 +515,13 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
     output_file.add_line(format!("}}"));
     output_file.add_newline();
 
+    output_file.add_line(format!(
+        "#define {0}_DESCRIPTOR &{1}_descriptor",
+        pascal_to_uppercase(&struct_definition.name),
+        pascal_to_snake_case(&struct_definition.name)
+    ));
+    output_file.add_newline();
+
     Ok(())
 }
 
@@ -571,7 +581,7 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     header_file.add_newline();
 
     // Include Runic Definitions
-    header_file.add_line(format!("#include \"runic_definitions.h\""));
+    header_file.add_line(format!("#include \"rune.h\""));
     header_file.add_newline();
 
     if !file.definitions.includes.is_empty() {
