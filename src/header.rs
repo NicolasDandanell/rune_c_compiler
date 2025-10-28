@@ -599,14 +599,14 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
 
     // Print all enum definitions
     for enum_definition in &file.definitions.enums {
-        output_enum(&mut header_file, configurations, &enum_definition);
+        output_enum(&mut header_file, configurations, &enum_definition)?;
     }
 
     // Bitfields
     // ——————————
 
     for bitfield_definition in &file.definitions.bitfields {
-        output_bitfield(&mut header_file, configurations, &bitfield_definition);
+        output_bitfield(&mut header_file, configurations, &bitfield_definition)?;
     }
 
     // Structs
@@ -614,7 +614,7 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
 
     // Print out structs
     for struct_definition in &file.definitions.structs {
-        output_struct(&mut header_file, configurations, &struct_definition);
+        output_struct(&mut header_file, configurations, &struct_definition)?;
 
         // Add struct initializer
         output_struct_initializer(&mut header_file, configurations, &struct_definition)?
