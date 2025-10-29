@@ -31,10 +31,10 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
 
     // Get the backing type with signed and unsigned variants
     let backing_type: (FieldType, FieldType) = match bitfield_definition.backing_type {
-        FieldType::Byte | FieldType::UByte => (FieldType::UByte, FieldType::Byte),
-        FieldType::Short | FieldType::UShort => (FieldType::UShort, FieldType::Short),
-        FieldType::Int | FieldType::UInt => (FieldType::UInt, FieldType::Int),
-        FieldType::Long | FieldType::ULong => (FieldType::ULong, FieldType::Long),
+        FieldType::I8 | FieldType::U8 => (FieldType::U8, FieldType::I8),
+        FieldType::I16 | FieldType::U16 => (FieldType::U16, FieldType::I16),
+        FieldType::I32 | FieldType::U32 => (FieldType::U32, FieldType::I32),
+        FieldType::I64 | FieldType::U64 => (FieldType::U64, FieldType::I64),
         _ => {
             error!("Only integer type primitives can back bitfields");
             return Err(CompilerError::MalformedSource);
@@ -286,8 +286,8 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
 
         let is_zero: bool = match enum_member.value {
             NumericLiteral::Boolean(value) => value == false,
-            NumericLiteral::PositiveBinary(value) | NumericLiteral::PositiveDecimal(value) | NumericLiteral::PositiveHexadecimal(value) => value == 0,
-            NumericLiteral::NegativeBinary(value) | NumericLiteral::NegativeHexadecimal(value) | NumericLiteral::NegativeDecimal(value) => value == 0,
+            NumericLiteral::PositiveInteger(value, _) => value == 0,
+            NumericLiteral::NegativeInteger(value, _) => value == 0,
             NumericLiteral::Float(value) => value == 0.0
         };
 
