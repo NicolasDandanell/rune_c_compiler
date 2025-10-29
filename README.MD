@@ -22,3 +22,7 @@ Path to folder where the _.rune_ files are located. The compiler will automatica
 * __--data_section (-d) <linker_section>__ - Optional argument to place all generated parsing data into a specific linker section.
 
 * __--unsorted (-u)__ Optional argument to avoid optimizing field elements in the structs for better alignment. By default they are optimized.
+
+* __--silent (-s)__ Optional argument to specify whether the program should avoid printing any info output at all. By default info output is printed
+
+* __--c_standard (-s)__ Optional argument which specifies which C standard the output source should comply with. By default it compiles to C23 standard
