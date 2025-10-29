@@ -15,10 +15,10 @@ use crate::{
 
 fn type_from_size(size: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
     match size {
-        1 => FieldType::UByte.to_c_type(c_standard),
-        2 => FieldType::UShort.to_c_type(c_standard),
-        4 => FieldType::UInt.to_c_type(c_standard),
-        8 => FieldType::ULong.to_c_type(c_standard),
+        1 => FieldType::U8.to_c_type(c_standard),
+        2 => FieldType::U16.to_c_type(c_standard),
+        4 => FieldType::U32.to_c_type(c_standard),
+        8 => FieldType::U64.to_c_type(c_standard),
         _ => {
             error!("Invalid type size given! This should not be possible");
             return Err(CompilerError::LogicError);

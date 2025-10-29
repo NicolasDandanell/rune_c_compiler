@@ -162,8 +162,8 @@ impl CNumericValue for NumericLiteral {
     fn requires_size(&self) -> u64 {
         let leading_zeroes = match self {
             NumericLiteral::Boolean(_) => return 1,
-            NumericLiteral::PositiveBinary(value) | NumericLiteral::PositiveDecimal(value) | NumericLiteral::PositiveHexadecimal(value) => value.leading_zeros() / 8,
-            NumericLiteral::NegativeBinary(value) | NumericLiteral::NegativeDecimal(value) | NumericLiteral::NegativeHexadecimal(value) => value.leading_zeros() / 8,
+            NumericLiteral::PositiveInteger(value, _) => value.leading_zeros() / 8,
+            NumericLiteral::NegativeInteger(value, _) => value.leading_zeros() / 8,
             NumericLiteral::Float(value) => value.to_bits().leading_zeros() / 8
         };
 
@@ -189,57 +189,61 @@ pub trait CFieldType {
 impl CFieldType for FieldType {
     fn to_c_type(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let string: String = match self {
-            FieldType::Boolean => String::from(match c_standard.allows_boolean() {
+            // 8 Bit
+            FieldType::Bool => String::from(match c_standard.allows_boolean() {
                 true => "bool",
                 false => "char"
             }),
-
             FieldType::Char => String::from("char"),
-
-            FieldType::UByte => String::from(match c_standard.allows_integer_types() {
-                true => "uint8_t",
-                false => "unsigned char"
-            }),
-            FieldType::Byte => String::from(match c_standard.allows_integer_types() {
+            FieldType::I8 => String::from(match c_standard.allows_integer_types() {
                 true => "int8_t",
                 false => "signed char"
             }),
-
-            FieldType::UShort => String::from(match c_standard.allows_integer_types() {
-                true => "uint16_t",
-                false => "unsigned short"
+            FieldType::U8 => String::from(match c_standard.allows_integer_types() {
+                true => "uint8_t",
+                false => "unsigned char"
             }),
-            FieldType::Short => String::from(match c_standard.allows_integer_types() {
+
+            // 16 Bit
+            FieldType::I16 => String::from(match c_standard.allows_integer_types() {
                 true => "int16_t",
                 false => "signed short"
             }),
-
-            FieldType::UInt => String::from(match c_standard.allows_integer_types() {
-                true => "uint32_t",
-                false => "unsigned long"
+            FieldType::U16 => String::from(match c_standard.allows_integer_types() {
+                true => "uint16_t",
+                false => "unsigned short"
             }),
-            FieldType::Int => String::from(match c_standard.allows_integer_types() {
+
+            // 32 Bit
+            FieldType::F32 => String::from("float"),
+            FieldType::I32 => String::from(match c_standard.allows_integer_types() {
                 true => "int32_t",
                 false => "signed long"
             }),
-
-            FieldType::ULong => String::from(match c_standard.allows_integer_types() {
-                true => "uint64_t",
-                false => {
-                    error!("Cannot guarantee 64 bit integers before C99 standard! Thus they are not allowed if using {0}", c_standard.to_string());
-                    return Err(CompilerError::SourceAndCStandardMismatch);
-                }
+            FieldType::U32 => String::from(match c_standard.allows_integer_types() {
+                true => "uint32_t",
+                false => "unsigned long"
             }),
-            FieldType::Long => String::from(match c_standard.allows_integer_types() {
+
+            // 64 Bit
+            FieldType::F64 => String::from("double"),
+            FieldType::I64 => String::from(match c_standard.allows_integer_types() {
                 true => "int64_t",
                 false => {
                     error!("Cannot guarantee 64 bit integers before C99 standard! Thus they are not allowed if using {0}", c_standard.to_string());
                     return Err(CompilerError::SourceAndCStandardMismatch);
                 }
             }),
+            FieldType::U64 => String::from(match c_standard.allows_integer_types() {
+                true => "uint64_t",
+                false => {
+                    error!("Cannot guarantee 64 bit integers before C99 standard! Thus they are not allowed if using {0}", c_standard.to_string());
+                    return Err(CompilerError::SourceAndCStandardMismatch);
+                }
+            }),
 
-            FieldType::Float => String::from("float"),
-            FieldType::Double => String::from("double"),
+            // 128 Bit - Devolve into unsigned 16 Byte arrays
+            FieldType::I128 | FieldType::U128 => FieldType::U8.to_c_type(c_standard)?,
 
             FieldType::UserDefined(string) => format!("{0}_t", pascal_to_snake_case(string)),
 
@@ -256,18 +260,27 @@ impl CFieldType for FieldType {
 
     fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
         match self {
-            FieldType::Boolean
+            FieldType::Bool
             | FieldType::Char
-            | FieldType::UByte
-            | FieldType::Byte
-            | FieldType::UShort
-            | FieldType::Short
-            | FieldType::Float
-            | FieldType::UInt
-            | FieldType::Int
-            | FieldType::Double
-            | FieldType::ULong
-            | FieldType::Long => Ok(format!("{0} {1}{2}", self.to_c_type(c_standard)?, spaces(spacing), name)),
+            | FieldType::I8
+            | FieldType::U8
+            | FieldType::I16
+            | FieldType::U16
+            | FieldType::F32
+            | FieldType::I32
+            | FieldType::U32
+            | FieldType::F64
+            | FieldType::I64
+            | FieldType::U64 => Ok(format!("{0} {1}{2}", self.to_c_type(c_standard)?, spaces(spacing), name)),
+
+            // 128 bit integers get converted into a byte array
+            FieldType::I128 | FieldType::U128 => Ok(format!(
+                "{0} {1}{2}[{3}]",
+                FieldType::U8.to_c_type(c_standard)?,
+                spaces(spacing),
+                name,
+                self.primitive_c_size()?.to_string()
+            )),
 
             FieldType::UserDefined(string) => Ok(format!("{0}_t {1}{2}", pascal_to_snake_case(string), spaces(spacing), name)),
             FieldType::Array(field_type, field_size) => Ok(format!("{0} {1}{2}[{3}]", field_type.to_c_type(c_standard)?, spaces(spacing), name, field_size.to_string())),
@@ -281,21 +294,15 @@ impl CFieldType for FieldType {
     // Size is calculated without padding, and is a guesstimate at best
     fn primitive_c_size(&self) -> Result<u64, CompilerError> {
         let value: u64 = match self {
-            FieldType::Boolean => 1,
-            FieldType::Char => 1,
-            FieldType::UByte => 1,
-            FieldType::Byte => 1,
+            FieldType::Bool | FieldType::Char | FieldType::I8 | FieldType::U8 => 1,
 
-            FieldType::UShort => 2,
-            FieldType::Short => 2,
+            FieldType::I16 | FieldType::U16 => 2,
 
-            FieldType::Float => 4,
-            FieldType::UInt => 4,
-            FieldType::Int => 4,
+            FieldType::F32 | FieldType::I32 | FieldType::U32 => 4,
 
-            FieldType::Double => 8,
-            FieldType::ULong => 8,
-            FieldType::Long => 8,
+            FieldType::F64 | FieldType::I64 | FieldType::U64 => 8,
+
+            FieldType::I128 | FieldType::U128 => 16,
 
             FieldType::Empty => 0,
             _ => {
@@ -308,32 +315,38 @@ impl CFieldType for FieldType {
 
     fn c_initializer(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let string = match self {
-            FieldType::Boolean => match c_standard.allows_boolean() {
+            FieldType::Bool => match c_standard.allows_boolean() {
                 true => String::from("false"),
                 false => String::from("0")
             },
-            FieldType::Char => String::from("0"),
-            FieldType::Byte => String::from("0"),
-            FieldType::UByte => String::from("0"),
-            FieldType::Short => String::from("0"),
-            FieldType::UShort => String::from("0"),
-            FieldType::Float => String::from("0.0"),
-            FieldType::Int => String::from("0"),
-            FieldType::UInt => String::from("0"),
-            FieldType::Double => String::from("0.0"),
-            FieldType::Long => String::from("0"),
-            FieldType::ULong => String::from("0"),
+
+            FieldType::Char | FieldType::I8 | FieldType::U8 | FieldType::I16 | FieldType::U16 | FieldType::I32 | FieldType::U32 | FieldType::I64 | FieldType::U64 => String::from("0"),
+
+            FieldType::F32 | FieldType::F64 => String::from("0.0"),
+
+            // 128 bit integers are converted into 16 byte arrays in this implementation, due to lack of good 128 bit int support
+            FieldType::I128 | FieldType::U128 => String::from("{ 0 }"),
+
             FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
             FieldType::Array(field_type, _) => format!(
                 "{{ {0} }}",
                 match field_type.as_ref() {
-                    FieldType::Boolean => String::from("false"),
-                    FieldType::Char | FieldType::Byte | FieldType::UByte | FieldType::Short | FieldType::UShort | FieldType::Int | FieldType::UInt | FieldType::Long | FieldType::ULong =>
-                        String::from("0"),
-                    FieldType::Float | FieldType::Double => String::from("0.0"),
+                    FieldType::Bool => match c_standard.allows_boolean() {
+                        true => String::from("false"),
+                        false => String::from("0")
+                    },
+                    FieldType::Char | FieldType::I8 | FieldType::U8 | FieldType::I16 | FieldType::U16 | FieldType::I32 | FieldType::U32 | FieldType::I64 | FieldType::U64 => String::from("0"),
+
+                    FieldType::I128 | FieldType::U128 => {
+                        error!("128 bit integer arrays are currently not supported. This is due to them requiring conversion into a byte array in many 32 bit systems");
+                        return Err(CompilerError::UnsupportedFeature);
+                    },
+
+                    FieldType::F32 | FieldType::F64 => String::from("0.0"),
+
                     FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
                     FieldType::Array(_, _) => {
-                        error!("Nested arrays are not currently supported");
+                        error!("Nested arrays are currently not supported");
                         return Err(CompilerError::UnsupportedFeature);
                     },
                     FieldType::Empty => {
@@ -384,9 +397,26 @@ impl CStructMember for StructMember {
 
     fn c_size_definition(&self, standard: &CStandard) -> Result<String, CompilerError> {
         let size_string: String = match &self.data_type {
+            FieldType::Bool
+            | FieldType::Char
+            | FieldType::I8
+            | FieldType::U8
+            | FieldType::I16
+            | FieldType::U16
+            | FieldType::F32
+            | FieldType::I32
+            | FieldType::U32
+            | FieldType::F64
+            | FieldType::I64
+            | FieldType::U64 => format!("sizeof({0})", self.data_type.to_c_type(standard)?),
+
+            // Default to 16 Byte array of uint8_t
+            FieldType::I128 | FieldType::U128 => format!("(sizeof({0}) * 16)", self.data_type.to_c_type(standard)?),
+
             FieldType::UserDefined(type_name) => {
                 format!("sizeof({0}_t)", pascal_to_snake_case(&type_name))
             },
+
             FieldType::Array(array_type, array_size) => {
                 let type_string: String = match &(**array_type) {
                     FieldType::Array(_, _) => {
@@ -401,8 +431,7 @@ impl CStructMember for StructMember {
 
                 format!("({0} * {1})", type_string, array_size.to_string())
             },
-            FieldType::Empty => String::from("0"),
-            _ => format!("sizeof({0})", self.data_type.to_c_type(standard)?)
+            FieldType::Empty => String::from("0")
         };
         Ok(size_string)
     }
@@ -413,12 +442,10 @@ impl CStructMember for StructMember {
             FieldType::Array(array_field_type, field_size) => {
                 // Get the array size first
                 let array_size: u64 = match field_size {
-                    ArraySize::Binary(value) | ArraySize::Decimal(value) | ArraySize::Hexadecimal(value) => *value,
+                    ArraySize::Integer(value, _) => *value,
                     ArraySize::UserDefinition(definition) => match &definition.value {
                         DefineValue::NumericLiteral(value) => match value {
-                            NumericLiteral::PositiveBinary(binary) => *binary,
-                            NumericLiteral::PositiveDecimal(decimal) => *decimal,
-                            NumericLiteral::PositiveHexadecimal(hexadecimal) => *hexadecimal,
+                            NumericLiteral::PositiveInteger(value, _) => *value,
                             _ => {
                                 error!("Got \"{0:?}\" array size definition of an invalid type!", self.identifier);
                                 return Err(CompilerError::MalformedSource);
