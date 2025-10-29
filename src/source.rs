@@ -195,8 +195,8 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 verification_string,
                 i
             ));
-            source_file.add_line(format!("    {0}        .offset.      ={1} {2},", comment_start, comment_end, offset_string));
-            source_file.add_line(format!("    {0}        .size.        ={1} {2},", comment_start, comment_end, size_string));
+            source_file.add_line(format!("    {0}        .offset       ={1} {2},", comment_start, comment_end, offset_string));
+            source_file.add_line(format!("    {0}        .size         ={1} {2},", comment_start, comment_end, size_string));
             source_file.add_line(format!("    {0}        .parser_index ={1} {2}", comment_start, comment_end, parser_index_string));
 
             source_file.add_line(format!("        }}{0}", end));

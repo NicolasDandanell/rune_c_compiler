@@ -50,7 +50,7 @@ pub fn output_parser(file_descriptions: &Vec<RuneFileDescription>, _configuratio
     // ———————
 
     // Define parser array
-    parser_file.add_line(String::from("static rune_descriptor_t* RUNIC_PARSER parser_array[RUNE_PARSER_COUNT] = {"));
+    parser_file.add_line(String::from("const rune_descriptor_t* RUNIC_PARSER parser_array[RUNE_PARSER_COUNT] = {"));
 
     for i in 0..struct_definitions.len() {
         let end: String = match i == struct_definitions.len() - 1 {
