@@ -143,7 +143,6 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
         let comment_start: &'static str;
         let comment_end: &'static str;
-        let unused: &'static str;
         let space: &'static str;
         let has_verification_string: String;
 
@@ -151,14 +150,12 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             true => {
                 comment_start = "";
                 comment_end = "";
-                unused = "/* unused */";
                 space = "    ";
                 has_verification_string = has_verification.to_string();
             },
             false => {
                 comment_start = "/* ";
                 comment_end = " */";
-                unused = "(unused)";
                 space = "";
                 has_verification_string = (has_verification as usize).to_string()
             }
@@ -168,9 +165,8 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
         source_file.add_line(format!("    {0}.descriptor_flags     {1}={2} 0b{3:0members$b},", comment_start, space, comment_end, descriptor_flags, members = member_count as usize));
         source_file.add_line(format!("    {0}.field_descriptors    {1}={2} {3},", comment_start, space, comment_end, descriptor_list_initializer));
         source_file.add_line(format!("    {0}.size                 {1}={2} sizeof({3}_t),", comment_start, space, comment_end, struct_name));
+        source_file.add_line(format!("    {0}.largest_field        {1}={2} {3},", comment_start, space, comment_end, highest_index));
         source_file.add_line(format!("    {0}.parsing_data         {1}={2} {{", comment_start, space, comment_end));
-        source_file.add_line(format!("    {0}    .largest_field    {1}={2} {3},", comment_start, space, comment_end, highest_index));
-        source_file.add_line(format!("    {0}    .padding {1} ={2} 0", comment_start, unused, comment_end));
         source_file.add_line(format!("    {0}    .has_verification {1}={2} {3},", comment_start, space, comment_end, has_verification_string));
         source_file.add_line(format!("    }},"));
         source_file.add_line(format!("    {0}.field_info           {1}={2} {{", comment_start, space, comment_end));
