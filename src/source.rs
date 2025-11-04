@@ -128,8 +128,8 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
             for i in 0..descriptor_list.len() {
                 let comma: String = match i == descriptor_list.len() - 1 {
-                    true => String::from(","),
-                    false => String::new()
+                    true => String::new(),
+                    false => String::from(",")
                 };
                 source_file.add_line(format!("    &{0}_descriptor{1}", descriptor_list[i], comma));
             }
