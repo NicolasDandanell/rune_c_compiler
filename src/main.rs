@@ -7,7 +7,6 @@ mod c_utilities;
 mod compile_error;
 mod header;
 mod output_file;
-mod parser;
 mod runic_definitions;
 mod source;
 
@@ -22,7 +21,6 @@ use crate::{
     compile_error::CompilerError,
     header::output_header,
     output::*,
-    parser::output_parser,
     runic_definitions::output_runic_definitions,
     source::output_source
 };
@@ -85,7 +83,7 @@ fn main() -> Result<(), CompilerError> {
     let input_path: &Path = Path::new(args.input_folder.as_str());
     let output_path: &Path = Path::new(args.output_folder.as_str());
     let configurations: CompileConfigurations = CompileConfigurations {
-        c_standard:    c_standard,
+        c_standard,
         pack_data:     args.pack_data,
         pack_metadata: args.pack_metadata,
         section:       args.data_section,
@@ -144,10 +142,6 @@ pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: 
         // Create source file
         output_source(&file, &c_configurations, output_path)?;
     }
-
-    // Create parser
-    info!("Outputting parser file");
-    output_parser(&file_descriptions, &c_configurations, output_path)?;
 
     info!("Rune C compiler is done!");
     Ok(())
