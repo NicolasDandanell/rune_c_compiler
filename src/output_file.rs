@@ -32,7 +32,7 @@ impl OutputFile {
     }
 
     pub fn add_newline(&mut self) {
-        self.string_buffer.push_str("\n");
+        self.string_buffer.push('\n');
     }
 
     fn create_folder(path: &Path) -> Result<(), CompilerError> {
@@ -42,14 +42,14 @@ impl OutputFile {
         }
 
         match path.parent() {
-            None => return Ok(()),
+            None => Ok(()),
             Some(parent) => {
                 OutputFile::create_folder(parent)?;
 
                 match create_dir(path) {
                     Err(error) => {
                         error!("Could not create directory {0:?}. Got error {1}", path, error);
-                        return Err(CompilerError::FileSystemError(error));
+                        Err(CompilerError::FileSystemError(error))
                     },
                     Ok(_) => Ok(())
                 }
@@ -72,12 +72,9 @@ impl OutputFile {
 
         // Check if file already exists
         if output_file_path.exists() {
-            match remove_file(output_file_path) {
-                Err(error) => {
-                    error!("Could not delete existing {0} file. Got error {1}", output_file_path.to_str().unwrap(), error);
-                    return Err(CompilerError::FileSystemError(error));
-                },
-                Ok(_) => ()
+            if let Err(error) = remove_file(output_file_path) {
+                error!("Could not delete existing {0} file. Got error {1}", output_file_path.to_str().unwrap(), error);
+                return Err(CompilerError::FileSystemError(error));
             }
         }
 
@@ -89,15 +86,15 @@ impl OutputFile {
             Ok(file_result) => file_result
         };
 
-        match output_file.write(self.string_buffer.as_bytes()) {
+        match output_file.write_all(self.string_buffer.as_bytes()) {
             Err(error) => {
                 error!("Could not write to \"{0}\" file. Got error {1}", self.name, error);
-                return Err(CompilerError::FileSystemError(error));
+                Err(CompilerError::FileSystemError(error))
             },
             Ok(_) => match output_file.flush() {
                 Err(error) => {
                     error!("Could not flush to \"{0}\" file. Got error {1}", self.name, error);
-                    return Err(CompilerError::FileSystemError(error));
+                    Err(CompilerError::FileSystemError(error))
                 },
                 Ok(_) => Ok(())
             }

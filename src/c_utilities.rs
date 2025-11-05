@@ -21,7 +21,7 @@ pub fn spaces(amount: usize) -> String {
 }
 
 /// Convert NamedVariable to named_variable
-pub fn pascal_to_snake_case(pascal: &String) -> String {
+pub fn pascal_to_snake_case(pascal: &str) -> String {
     let mut snake: String = String::with_capacity(0x40);
 
     for i in 0..pascal.len() {
@@ -38,7 +38,7 @@ pub fn pascal_to_snake_case(pascal: &String) -> String {
 }
 
 /// Convert NamedVariable to NAMED_VARIABLE
-pub fn pascal_to_uppercase(pascal: &String) -> String {
+pub fn pascal_to_uppercase(pascal: &str) -> String {
     let mut uppecase: String = String::with_capacity(0x40);
 
     for i in 0..pascal.len() {
@@ -182,7 +182,7 @@ impl CNumericValue for NumericLiteral {
 pub trait CPrimitive {
     fn c_size(&self) -> u64;
     fn c_initializer(&self, c_standard: &CStandard) -> String;
-    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
     fn to_c_type(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
 }
 
@@ -217,7 +217,7 @@ impl CPrimitive for Primitive {
         }
     }
 
-    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
         match self {
             Primitive::Bool
             | Primitive::Char
@@ -233,7 +233,7 @@ impl CPrimitive for Primitive {
             | Primitive::U64 => Ok(format!("{0} {1}{2}", self.to_c_type(c_standard)?, spaces(spacing), name)),
 
             // 128 bit integers get converted into a byte array
-            Primitive::I128 | Primitive::U128 => Ok(format!("{0} {1}{2}[{3}]", Primitive::U8.to_c_type(c_standard)?, spaces(spacing), name, self.c_size().to_string()))
+            Primitive::I128 | Primitive::U128 => Ok(format!("{0} {1}{2}[{3}]", Primitive::U8.to_c_type(c_standard)?, spaces(spacing), name, self.c_size()))
         }
     }
 
@@ -323,18 +323,18 @@ impl CArrayType for ArrayType {
 
 pub trait CFieldType {
     fn c_initializer(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
-    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
 }
 
 impl CFieldType for FieldType {
-    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
         match self {
             FieldType::Primitive(primitive) => primitive.create_c_variable(name, spacing, c_standard),
             FieldType::UserDefined(string) => Ok(format!("{0}_t {1}{2}", pascal_to_snake_case(string), spaces(spacing), name)),
-            FieldType::Array(field_type, field_size) => Ok(format!("{0} {1}{2}[{3}]", field_type.to_c_type(c_standard)?, spaces(spacing), name, field_size.to_string())),
+            FieldType::Array(field_type, field_size) => Ok(format!("{0} {1}{2}[{3}]", field_type.to_c_type(c_standard)?, spaces(spacing), name, field_size)),
             FieldType::Empty => {
                 error!("Cannot create an empty field!");
-                return Err(CompilerError::LogicError);
+                Err(CompilerError::LogicError)
             }
         }
     }
@@ -342,7 +342,7 @@ impl CFieldType for FieldType {
     fn c_initializer(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let string = match self {
             FieldType::Primitive(primitive) => primitive.c_initializer(c_standard),
-            FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
+            FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(name)),
             FieldType::Array(array_type, _) => format!(
                 "{{ {0} }}",
                 match array_type {
@@ -351,7 +351,7 @@ impl CFieldType for FieldType {
                         String::from("0")
                     },
                     ArrayType::Primitive(primitive) => primitive.c_initializer(c_standard),
-                    ArrayType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name))
+                    ArrayType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(name))
                 }
             ),
             FieldType::Empty => {
@@ -397,14 +397,14 @@ impl CStructMember for StructMember {
     fn c_size_definition(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let size_string: String = match &self.data_type {
             FieldType::Primitive(primitive) => format!("sizeof({0})", primitive.to_c_type(c_standard)?),
-            FieldType::UserDefined(type_name) => format!("sizeof({0}_t)", pascal_to_snake_case(&type_name)),
+            FieldType::UserDefined(type_name) => format!("sizeof({0}_t)", pascal_to_snake_case(type_name)),
             FieldType::Array(array_type, array_size) => {
                 let type_string: String = match array_type {
                     ArrayType::Primitive(primitive) => format!("sizeof({0})", primitive.to_c_type(c_standard)?),
-                    ArrayType::UserDefined(name) => format!("sizeof({0}_t)", pascal_to_snake_case(&name))
+                    ArrayType::UserDefined(name) => format!("sizeof({0}_t)", pascal_to_snake_case(name))
                 };
 
-                format!("({0} * {1})", type_string, array_size.to_string())
+                format!("({0} * {1})", type_string, array_size)
             },
             FieldType::Empty => String::from("0")
         };
@@ -463,7 +463,7 @@ impl CStructMember for StructMember {
             FieldType::UserDefined(name) => match &self.user_definition_link {
                 UserDefinitionLink::NoLink => {
                     error!("Found no definition link for item {0}!", name);
-                    return Err(CompilerError::MalformedSource);
+                    Err(CompilerError::MalformedSource)
                 },
                 UserDefinitionLink::BitfieldLink(bitfield_definition) => Ok(bitfield_definition.backing_type.c_size()),
                 UserDefinitionLink::EnumLink(enum_definition) => Ok(enum_definition.backing_type.c_size()),

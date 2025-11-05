@@ -101,12 +101,9 @@ fn main() -> Result<(), CompilerError> {
 
     // If output folder does exist, create it
     if !output_path.is_dir() {
-        match create_dir(output_path) {
-            Err(error) => {
-                error!("Cannot create directory {0:?}. Got error {1}", output_path, error);
-                return Err(CompilerError::FileSystemError(error));
-            },
-            Ok(()) => ()
+        if let Err(error) = create_dir(output_path) {
+            error!("Cannot create directory {0:?}. Got error {1}", output_path, error);
+            return Err(CompilerError::FileSystemError(error));
         }
     }
 
@@ -137,10 +134,10 @@ pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: 
         info!("    {0}{1}.rune", file.relative_path, file.name);
 
         // Create header file
-        output_header(&file, &c_configurations, output_path)?;
+        output_header(file, &c_configurations, output_path)?;
 
         // Create source file
-        output_source(&file, &c_configurations, output_path)?;
+        output_source(file, &c_configurations, output_path)?;
     }
 
     info!("Rune C compiler is done!");

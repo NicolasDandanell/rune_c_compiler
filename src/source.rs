@@ -37,7 +37,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
     // Include rune.h
     // ———————————————
 
-    source_file.add_line(format!("#include \"rune.h\""));
+    source_file.add_line("#include \"rune.h\"".to_string());
 
     if !&file.definitions.structs.is_empty() {
         source_file.add_newline();
@@ -100,12 +100,9 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                     }
 
                     // Check to see if it's a nested message, and add descriptor if so
-                    match &member.user_definition_link {
-                        UserDefinitionLink::StructLink(link) => {
-                            descriptor_list.push(pascal_to_snake_case(&link.name));
-                            descriptor_flags += 1 << member.index.value();
-                        },
-                        _ => ()
+                    if let UserDefinitionLink::StructLink(link) = &member.user_definition_link {
+                        descriptor_list.push(pascal_to_snake_case(&link.name));
+                        descriptor_flags += 1 << member.index.value();
                     }
                 }
             }
@@ -132,7 +129,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 source_file.add_line(format!("    &{0}_descriptor{1}", descriptor_list[i], comma));
             }
 
-            source_file.add_line(format!("}};"));
+            source_file.add_line("};".to_string());
             source_file.add_newline();
         }
 
@@ -173,7 +170,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
         source_file.add_line(format!("    {0}.largest_field        {1}={2} {3},", comment_start, space, comment_end, highest_index));
         source_file.add_line(format!("    {0}.parsing_data         {1}={2} {{", comment_start, space, comment_end));
         source_file.add_line(format!("    {0}    .has_verification {1}={2} {3},", comment_start, space, comment_end, has_verification_string));
-        source_file.add_line(format!("    }},"));
+        source_file.add_line("    },".to_string());
         source_file.add_line(format!("    {0}.field_info           {1}={2} {{", comment_start, space, comment_end));
 
         for i in 0..(member_count as usize) {
@@ -224,8 +221,8 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             source_file.add_line(format!("        }}{0}", end));
         }
 
-        source_file.add_line(format!("    }}"));
-        source_file.add_line(format!("}};"));
+        source_file.add_line("    }".to_string());
+        source_file.add_line("};".to_string());
     }
 
     source_file.output_file()
