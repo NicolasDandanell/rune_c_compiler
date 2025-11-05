@@ -71,11 +71,11 @@ impl OutputFile {
         }
 
         // Check if file already exists
-        if output_file_path.exists() {
-            if let Err(error) = remove_file(output_file_path) {
-                error!("Could not delete existing {0} file. Got error {1}", output_file_path.to_str().unwrap(), error);
-                return Err(CompilerError::FileSystemError(error));
-            }
+        if output_file_path.exists()
+            && let Err(error) = remove_file(output_file_path)
+        {
+            error!("Could not delete existing {0} file. Got error {1}", output_file_path.to_str().unwrap(), error);
+            return Err(CompilerError::FileSystemError(error));
         }
 
         let mut output_file: File = match File::create(output_file_path) {

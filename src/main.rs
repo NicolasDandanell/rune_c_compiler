@@ -100,11 +100,11 @@ fn main() -> Result<(), CompilerError> {
     }
 
     // If output folder does exist, create it
-    if !output_path.is_dir() {
-        if let Err(error) = create_dir(output_path) {
-            error!("Cannot create directory {0:?}. Got error {1}", output_path, error);
-            return Err(CompilerError::FileSystemError(error));
-        }
+    if !output_path.is_dir()
+        && let Err(error) = create_dir(output_path)
+    {
+        error!("Cannot create directory {0:?}. Got error {1}", output_path, error);
+        return Err(CompilerError::FileSystemError(error));
     }
 
     let definitions_list: Vec<RuneFileDescription> = match parser_rune_files(input_path, true, false) {

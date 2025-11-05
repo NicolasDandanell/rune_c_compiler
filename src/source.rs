@@ -173,30 +173,30 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
         source_file.add_line("    },".to_string());
         source_file.add_line(format!("    {0}.field_info           {1}={2} {{", comment_start, space, comment_end));
 
-        for i in 0..(member_count as usize) {
-            let member_name: String = pascal_to_snake_case(&index_sorted_members[i].identifier);
+        for (counter, member) in index_sorted_members.iter().enumerate() {
+            let member_name: String = pascal_to_snake_case(&member.identifier);
             let spacing: usize = longest_member_name_size - member_name.len();
 
             //  println!("Got spacing {0} from longest member size {1}", spacing, longest_member_name_size);
 
-            let init_char: String = match &index_sorted_members[i].data_type {
+            let init_char: String = match &member.data_type {
                 FieldType::Empty => String::new(),
                 _ => String::from(".")
             };
 
-            let end: char = match i == member_count as usize - 1 {
+            let end: char = match counter == member_count as usize - 1 {
                 false => ',',
                 true => ' '
             };
 
-            let size_string: String = index_sorted_members[i].c_size_definition(c_standard)?;
+            let size_string: String = member.c_size_definition(c_standard)?;
 
-            let verification_string: String = match has_verification && i == 0 {
+            let verification_string: String = match has_verification && counter == 0 {
                 false => String::from(""),
                 true => String::from("Verifier field - ")
             };
 
-            let offset_string: String = match &index_sorted_members[i].data_type {
+            let offset_string: String = match &member.data_type {
                 FieldType::Empty => String::from("0"),
                 _ => format!("offsetof({0}_t, {1})", struct_name, member_name)
             };
@@ -213,7 +213,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 member_name,
                 spaces(spacing),
                 verification_string,
-                i
+                counter
             ));
             source_file.add_line(format!("    {0}        .offset ={1} {2},", comment_start, comment_end, offset_string));
             source_file.add_line(format!("    {0}        .size   ={1} {2},", comment_start, comment_end, size_string));
