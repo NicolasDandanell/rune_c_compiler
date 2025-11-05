@@ -18,7 +18,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             true => String::new(),
             false => format!("/{0}", file.relative_path)
         },
-        file.file_name
+        file.name
     );
 
     let mut source_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), c_file_string);
@@ -31,13 +31,13 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
     // Include own header
     // ———————————————————
 
-    source_file.add_line(format!("#include \"{0}.rune.h\"", file.file_name));
+    source_file.add_line(format!("#include \"{0}.rune.h\"", file.name));
     source_file.add_newline();
 
     // Include rune.h
     // ———————————————
 
-    source_file.add_line(format!("#include \"rune.h\""));
+    source_file.add_line("#include \"rune.h\"".to_string());
 
     if !&file.definitions.structs.is_empty() {
         source_file.add_newline();
@@ -100,20 +100,15 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                     }
 
                     // Check to see if it's a nested message, and add descriptor if so
-                    match &member.user_definition_link {
-                        UserDefinitionLink::StructLink(link) => {
-                            descriptor_list.push(pascal_to_snake_case(&link.name));
-                            descriptor_flags += 1 << member.index.value();
-                        },
-                        _ => ()
+                    if let UserDefinitionLink::StructLink(link) = &member.user_definition_link {
+                        descriptor_list.push(pascal_to_snake_case(&link.name));
+                        descriptor_flags += 1 << member.index.value();
                     }
                 }
             }
 
             index_sorted_members.push(member);
         }
-
-
 
         // Handle field descriptors
         // —————————————————————————
@@ -134,7 +129,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 source_file.add_line(format!("    &{0}_descriptor{1}", descriptor_list[i], comma));
             }
 
-            source_file.add_line(format!("}};"));
+            source_file.add_line("};".to_string());
             source_file.add_newline();
         }
 
@@ -162,39 +157,46 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
         }
 
         source_file.add_line(format!("const rune_descriptor_t RUNIC_PARSER {0}_descriptor = {{", struct_name));
-        source_file.add_line(format!("    {0}.descriptor_flags     {1}={2} 0b{3:0members$b},", comment_start, space, comment_end, descriptor_flags, members = member_count as usize));
+        source_file.add_line(format!(
+            "    {0}.descriptor_flags     {1}={2} 0b{3:0members$b},",
+            comment_start,
+            space,
+            comment_end,
+            descriptor_flags,
+            members = member_count as usize
+        ));
         source_file.add_line(format!("    {0}.field_descriptors    {1}={2} {3},", comment_start, space, comment_end, descriptor_list_initializer));
         source_file.add_line(format!("    {0}.size                 {1}={2} sizeof({3}_t),", comment_start, space, comment_end, struct_name));
         source_file.add_line(format!("    {0}.largest_field        {1}={2} {3},", comment_start, space, comment_end, highest_index));
         source_file.add_line(format!("    {0}.parsing_data         {1}={2} {{", comment_start, space, comment_end));
         source_file.add_line(format!("    {0}    .has_verification {1}={2} {3},", comment_start, space, comment_end, has_verification_string));
-        source_file.add_line(format!("    }},"));
+        source_file.add_line("    },".to_string());
         source_file.add_line(format!("    {0}.field_info           {1}={2} {{", comment_start, space, comment_end));
 
-        for i in 0..(member_count as usize) {
-            let member_name: String = pascal_to_snake_case(&index_sorted_members[i].identifier);
+        for (counter, member) in index_sorted_members.iter().enumerate() {
+            let member_name: String = pascal_to_snake_case(&member.identifier);
             let spacing: usize = longest_member_name_size - member_name.len();
 
             //  println!("Got spacing {0} from longest member size {1}", spacing, longest_member_name_size);
 
-            let init_char: String = match &index_sorted_members[i].data_type {
+            let init_char: String = match &member.data_type {
                 FieldType::Empty => String::new(),
                 _ => String::from(".")
             };
 
-            let end: char = match i == member_count as usize - 1 {
+            let end: char = match counter == member_count as usize - 1 {
                 false => ',',
                 true => ' '
             };
 
-            let size_string: String = index_sorted_members[i].c_size_definition(c_standard)?;
+            let size_string: String = member.c_size_definition(c_standard)?;
 
-            let verification_string: String = match has_verification && i == 0 {
+            let verification_string: String = match has_verification && counter == 0 {
                 false => String::from(""),
                 true => String::from("Verifier field - ")
             };
 
-            let offset_string: String = match &index_sorted_members[i].data_type {
+            let offset_string: String = match &member.data_type {
                 FieldType::Empty => String::from("0"),
                 _ => format!("offsetof({0}_t, {1})", struct_name, member_name)
             };
@@ -211,7 +213,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 member_name,
                 spaces(spacing),
                 verification_string,
-                i
+                counter
             ));
             source_file.add_line(format!("    {0}        .offset ={1} {2},", comment_start, comment_end, offset_string));
             source_file.add_line(format!("    {0}        .size   ={1} {2},", comment_start, comment_end, size_string));
@@ -219,8 +221,8 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             source_file.add_line(format!("        }}{0}", end));
         }
 
-        source_file.add_line(format!("    }}"));
-        source_file.add_line(format!("}};"));
+        source_file.add_line("    }".to_string());
+        source_file.add_line("};".to_string());
     }
 
     source_file.output_file()

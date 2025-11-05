@@ -2,12 +2,12 @@ use std::path::Path;
 
 use rune_parser::{
     RuneFileDescription,
-    types::{FieldType, StructDefinition}
+    types::{Primitive, StructDefinition}
 };
 
 use crate::{
     c_standard::CStandard,
-    c_utilities::{CConfigurations, CFieldType, pascal_to_uppercase, spaces},
+    c_utilities::{CConfigurations, CPrimitive},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile
@@ -15,13 +15,13 @@ use crate::{
 
 fn type_from_size(size: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
     match size {
-        1 => FieldType::U8.to_c_type(c_standard),
-        2 => FieldType::U16.to_c_type(c_standard),
-        4 => FieldType::U32.to_c_type(c_standard),
-        8 => FieldType::U64.to_c_type(c_standard),
+        1 => Primitive::U8.to_c_type(c_standard),
+        2 => Primitive::U16.to_c_type(c_standard),
+        4 => Primitive::U32.to_c_type(c_standard),
+        8 => Primitive::U64.to_c_type(c_standard),
         _ => {
             error!("Invalid type size given! This should not be possible");
-            return Err(CompilerError::LogicError);
+            Err(CompilerError::LogicError)
         }
     }
 }
@@ -71,7 +71,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     // Parse "section" attribute
     // ——————————————————————————
 
-    if configurations.compiler_configurations.section != None {
+    if configurations.compiler_configurations.section.is_some() {
         let section_name: String = configurations.compiler_configurations.section.clone().unwrap();
 
         // Parser
@@ -136,27 +136,23 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     // Definitions
     // ————————————
 
-    definitions_file.add_line(format!("#ifndef RUNE_DEFINITIONS_H"));
-    definitions_file.add_line(format!("#define RUNE_DEFINITIONS_H"));
+    definitions_file.add_line("#ifndef RUNE_DEFINITIONS_H".to_string());
+    definitions_file.add_line("#define RUNE_DEFINITIONS_H".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("// Static definitions"));
-    definitions_file.add_line(format!("// ———————————————————"));
+    definitions_file.add_line("// Static definitions".to_string());
+    definitions_file.add_line("// ———————————————————".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS    0x1F"));
-    definitions_file.add_line(format!("#define RUNE_NO_PARSER           0xFF"));
-    definitions_file.add_line(format!("#define RUNE_TRANSPORT_TYPE_BITS 0xE0"));
-    definitions_file.add_line(format!("#define RUNE_VERIFICATION_FIELD  0x1F"));
+    definitions_file.add_line("#define RUNE_FIELD_INDEX_BITS 0x1F".to_string());
+    definitions_file.add_line("#define RUNE_PACKAGING_BITS   0xE0".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("// Configuration dependent definitions"));
-    definitions_file.add_line(format!("// ————————————————————————————————————"));
+    definitions_file.add_line("// Configuration dependent definitions".to_string());
+    definitions_file.add_line("// ————————————————————————————————————".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!(
-        "/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */"
-    ));
+    definitions_file.add_line("/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */".to_string());
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("#define RUNIC_BITFIELD {0}", runic_bitfield_string));
@@ -165,13 +161,11 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("#define RUNIC_STRUCT   {0}", runic_struct_string));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("// Message dependent definitions"));
-    definitions_file.add_line(format!("// ——————————————————————————————"));
+    definitions_file.add_line("// Message dependent definitions".to_string());
+    definitions_file.add_line("// ——————————————————————————————".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!(
-        "/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */"
-    ));
+    definitions_file.add_line("/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */".to_string());
     definitions_file.add_newline();
 
     definitions_file.add_line(format!(
@@ -211,37 +205,11 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     ));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("/** Defines whether and how metadata generated by the rune compiler should be packed optimized */"));
+    definitions_file.add_line("/** Defines whether and how metadata generated by the rune compiler should be packed optimized */".to_string());
     definitions_file.add_line(format!("#define RUNIC_METADATA {0}", runic_metadata_string));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("// Parsing array definitions"));
-    definitions_file.add_line(format!("// ——————————————————————————"));
-    definitions_file.add_newline();
-
-    definitions_file.add_line(format!("/** Number of struct pointers in the parser array */"));
-    definitions_file.add_line(format!("#define RUNE_PARSER_COUNT {0}", struct_definitions.len()));
-    definitions_file.add_newline();
-
-    // Calculate longest struct name for spacing reasons
-    let mut longest_struct_name: usize = 0;
-
-    for struct_definition in &struct_definitions {
-        let struct_name: String = pascal_to_uppercase(&struct_definition.name);
-
-        if struct_name.len() > longest_struct_name {
-            longest_struct_name = struct_name.len();
-        }
-    }
-
-    for i in 0..struct_definitions.len() {
-        let struct_name: String = pascal_to_uppercase(&struct_definitions[i].name);
-
-        definitions_file.add_line(format!("#define RUNE_{0}_PARSER_INDEX {1}{2}", struct_name, spaces(longest_struct_name - struct_name.len()), i + 1));
-    }
-    definitions_file.add_newline();
-
-    definitions_file.add_line(format!("#endif // RUNIC_DEFINITIONS_H"));
+    definitions_file.add_line("#endif // RUNIC_DEFINITIONS_H".to_string());
 
     definitions_file.output_file()
 }

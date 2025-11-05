@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CStandard {
     // C90 is an alias for C89
@@ -10,8 +12,8 @@ pub enum CStandard {
 }
 
 impl CStandard {
-    pub fn from_string(string: &String) -> Result<CStandard, ()> {
-        match string.as_str() {
+    pub fn from_string(string: &str) -> Result<CStandard, ()> {
+        match string {
             "c89" | "C89" | "c90" | "C90" => Ok(CStandard::C89),
             "c95" | "C95" => Ok(CStandard::C95),
             "c99" | "C99" => Ok(CStandard::C99),
@@ -19,17 +21,6 @@ impl CStandard {
             "c17" | "C17" => Ok(CStandard::C17),
             "c23" | "C23" => Ok(CStandard::C23),
             _ => Err(())
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            CStandard::C89 => String::from("C89"),
-            CStandard::C95 => String::from("C95"),
-            CStandard::C99 => String::from("C99"),
-            CStandard::C11 => String::from("C11"),
-            CStandard::C17 => String::from("C17"),
-            CStandard::C23 => String::from("C23")
         }
     }
 
@@ -65,5 +56,18 @@ impl CStandard {
 
     pub fn allows_enum_backing_type(&self) -> bool {
         *self >= CStandard::C23
+    }
+}
+
+impl Display for CStandard {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CStandard::C89 => write!(formatter, "C89"),
+            CStandard::C95 => write!(formatter, "C95"),
+            CStandard::C99 => write!(formatter, "C99"),
+            CStandard::C11 => write!(formatter, "C11"),
+            CStandard::C17 => write!(formatter, "C17"),
+            CStandard::C23 => write!(formatter, "C23")
+        }
     }
 }

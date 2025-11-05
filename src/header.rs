@@ -2,13 +2,13 @@ use std::path::Path;
 
 use rune_parser::{
     scanner::NumericLiteral,
-    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, FieldType, StructDefinition, StructMember}
+    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, Primitive, StructDefinition, StructMember}
 };
 
 use crate::{
     RuneFileDescription,
     c_standard::CStandard,
-    c_utilities::{CConfigurations, CFieldType, CNumericValue, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    c_utilities::{CConfigurations, CFieldType, CNumericValue, CPrimitive, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile
@@ -19,9 +19,8 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     let c_standard = &configurations.compiler_configurations.c_standard;
 
     // Print comment if present
-    match &bitfield_definition.comment {
-        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
-        None => ()
+    if let Some(comment) = &bitfield_definition.comment {
+        header_file.add_line(format!("/**{0}*/", comment))
     }
 
     let bitfield_name: String = pascal_to_snake_case(&bitfield_definition.name);
@@ -30,11 +29,11 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     let mut big_endian_order: Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
 
     // Get the backing type with signed and unsigned variants
-    let backing_type: (FieldType, FieldType) = match bitfield_definition.backing_type {
-        FieldType::I8 | FieldType::U8 => (FieldType::U8, FieldType::I8),
-        FieldType::I16 | FieldType::U16 => (FieldType::U16, FieldType::I16),
-        FieldType::I32 | FieldType::U32 => (FieldType::U32, FieldType::I32),
-        FieldType::I64 | FieldType::U64 => (FieldType::U64, FieldType::I64),
+    let backing_type: (Primitive, Primitive) = match bitfield_definition.backing_type {
+        Primitive::I8 | Primitive::U8 => (Primitive::U8, Primitive::I8),
+        Primitive::I16 | Primitive::U16 => (Primitive::U16, Primitive::I16),
+        Primitive::I32 | Primitive::U32 => (Primitive::U32, Primitive::I32),
+        Primitive::I64 | Primitive::U64 => (Primitive::U64, Primitive::I64),
         _ => {
             error!("Only integer type primitives can back bitfields");
             return Err(CompilerError::MalformedSource);
@@ -53,7 +52,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
 
     let padding: BitfieldMember = BitfieldMember {
         identifier: String::from("padding"),
-        size:       BitSize::Unsigned((bitfield_definition.backing_type.primitive_c_size()? * 8) - total_size),
+        size:       BitSize::Unsigned((bitfield_definition.backing_type.c_size() * 8) - total_size),
         index:      0, // Does not matter
         comment:    Some(String::from(" Padding to ensure proper alignment "))
     };
@@ -212,9 +211,8 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
 /// Outputs a define statement into the header file
 fn output_define(header_file: &mut OutputFile, define: &DefineDefinition) {
     // Print comment if present
-    match &define.comment {
-        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
-        None => ()
+    if let Some(comment) = &define.comment {
+        header_file.add_line(format!("/**{0}*/", comment))
     }
 
     let define_name: String = define.name.clone();
@@ -240,9 +238,8 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
     let c_standard = &configurations.compiler_configurations.c_standard;
 
     // Print comment if present
-    match &enum_definition.comment {
-        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
-        None => ()
+    if let Some(comment) = &enum_definition.comment {
+        header_file.add_line(format!("/**{0}*/", comment))
     }
 
     let enum_name: String = pascal_to_snake_case(&enum_definition.name);
@@ -285,7 +282,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
         let member_name: String = pascal_to_uppercase(&enum_member.identifier);
 
         let is_zero: bool = match enum_member.value {
-            NumericLiteral::Boolean(value) => value == false,
+            NumericLiteral::Boolean(value) => !value,
             NumericLiteral::PositiveInteger(value, _) => value == 0,
             NumericLiteral::NegativeInteger(value, _) => value == 0,
             NumericLiteral::Float(value) => value == 0.0
@@ -296,10 +293,8 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
         }
 
         // Check if the value is large enough to trigger the desired backing type
-        if needs_backing_value {
-            if enum_member.value.requires_size() == enum_definition.backing_type.primitive_c_size()? {
-                needs_backing_value = false;
-            }
+        if needs_backing_value && enum_member.value.requires_size() == enum_definition.backing_type.c_size() {
+            needs_backing_value = false;
         }
 
         let ending: String = match (i == enum_definition.members.len() - 1) && !needs_backing_value {
@@ -307,13 +302,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
             true => String::from("")
         };
 
-        header_file.add_line(format!(
-            "    {0}{1} = {2}{3}",
-            member_name,
-            spaces(longest_member_name - member_name.len()),
-            enum_member.value.to_string(),
-            ending
-        ));
+        header_file.add_line(format!("    {0}{1} = {2}{3}", member_name, spaces(longest_member_name - member_name.len()), enum_member.value, ending));
     }
 
     if needs_backing_value {
@@ -325,7 +314,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
         header_file.add_line(format!(
             "    {0}_SIZE_RESERVE_VALUE = {1}",
             pascal_to_uppercase(&enum_definition.name),
-            match enum_definition.backing_type.primitive_c_size()? {
+            match enum_definition.backing_type.c_size() {
                 0 => "0",
                 1 => "0xFF",
                 2 => "0xFFFF",
@@ -352,9 +341,8 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
     let c_standard = &configurations.compiler_configurations.c_standard;
 
     // Print comment if present
-    match &struct_definition.comment {
-        Some(comment) => header_file.add_line(format!("/**{0}*/", comment)),
-        None => ()
+    if let Some(comment) = &struct_definition.comment {
+        header_file.add_line(format!("/**{0}*/", comment))
     }
 
     let struct_name: String = pascal_to_snake_case(&struct_definition.name);
@@ -377,22 +365,24 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
 
     // >>> end <<<
 
-    // Print all struct members
-    for i in 0..sorted_member_list.len() {
-        let struct_member: &StructMember = &sorted_member_list[i];
+    let mut is_first: bool = true;
 
+    // Print all struct members
+    for member in &sorted_member_list {
         // Member comment
-        if struct_member.comment.is_some() {
-            if i != 0 {
+        if member.comment.is_some() {
+            if is_first {
                 header_file.add_newline();
             }
-            header_file.add_line(format!("    /**{0}*/", struct_member.comment.as_ref().unwrap()));
+            header_file.add_line(format!("    /**{0}*/", member.comment.as_ref().unwrap()));
         }
 
-        let member_name: String = pascal_to_snake_case(&struct_member.identifier);
+        let member_name: String = pascal_to_snake_case(&member.identifier);
         let spacing: usize = 0; // longest_type - sorted_member_list[i].field_type.to_c_type().len();
 
-        header_file.add_line(format!("    {0};", struct_member.data_type.create_c_variable(&member_name, spacing, c_standard)?));
+        header_file.add_line(format!("    {0};", member.data_type.create_c_variable(&member_name, spacing, c_standard)?));
+
+        is_first = false;
     }
 
     header_file.add_line(format!("}} {0}_t;", struct_name));
@@ -424,9 +414,9 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
     // ————————————————————————————————————————————————————
 
     let initializer_string: String = format!(
-        "#define {0}_INIT ({1}) {{{2}",
+        "#define {0}_INIT ({1}_t) {{{2}",
         pascal_to_uppercase(&struct_definition.name),
-        format!("{0}_t", pascal_to_snake_case(&struct_definition.name)),
+        pascal_to_snake_case(&struct_definition.name),
         spaces(0)
     );
     let mut pre_newline_length: usize = initializer_string.len();
@@ -512,7 +502,7 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
 
         output_file.add_line(initializer_string);
     }
-    output_file.add_line(format!("}}"));
+    output_file.add_line("}".to_string());
     output_file.add_newline();
 
     output_file.add_line(format!(
@@ -550,7 +540,7 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
             true => String::new(),
             false => format!("/{0}", file.relative_path)
         },
-        file.file_name
+        file.name
     );
 
     let mut header_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), h_file_string);
@@ -563,25 +553,25 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // Start & C++ guards
     // ———————————————————
 
-    header_file.add_line(format!("#ifndef {0}_RUNE_H", file.file_name.to_uppercase()));
-    header_file.add_line(format!("#define {0}_RUNE_H", file.file_name.to_uppercase()));
+    header_file.add_line(format!("#ifndef {0}_RUNE_H", file.name.to_uppercase()));
+    header_file.add_line(format!("#define {0}_RUNE_H", file.name.to_uppercase()));
     header_file.add_newline();
 
-    header_file.add_line(format!("#ifdef __cplusplus"));
-    header_file.add_line(format!("extern \"C\" {{"));
-    header_file.add_line(format!("#endif /* __cplusplus */"));
+    header_file.add_line("#ifdef __cplusplus".to_string());
+    header_file.add_line("extern \"C\" {".to_string());
+    header_file.add_line("#endif /* __cplusplus */".to_string());
     header_file.add_newline();
 
     // File inclusions
     // ————————————————
 
     // Standard library
-    header_file.add_line(format!("#include <stdbool.h>"));
-    header_file.add_line(format!("#include <stdint.h>"));
+    header_file.add_line("#include <stdbool.h>".to_string());
+    header_file.add_line("#include <stdint.h>".to_string());
     header_file.add_newline();
 
     // Include Runic Definitions
-    header_file.add_line(format!("#include \"rune.h\""));
+    header_file.add_line("#include \"rune.h\"".to_string());
     header_file.add_newline();
 
     if !file.definitions.includes.is_empty() {
@@ -599,7 +589,7 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
 
     if !file.definitions.defines.is_empty() {
         for define in &file.definitions.defines {
-            output_define(&mut header_file, &define);
+            output_define(&mut header_file, define);
         }
         header_file.add_newline();
     }
@@ -609,14 +599,14 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
 
     // Print all enum definitions
     for enum_definition in &file.definitions.enums {
-        output_enum(&mut header_file, configurations, &enum_definition)?;
+        output_enum(&mut header_file, configurations, enum_definition)?;
     }
 
     // Bitfields
     // ——————————
 
     for bitfield_definition in &file.definitions.bitfields {
-        output_bitfield(&mut header_file, configurations, &bitfield_definition)?;
+        output_bitfield(&mut header_file, configurations, bitfield_definition)?;
     }
 
     // Structs
@@ -624,21 +614,21 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
 
     // Print out structs
     for struct_definition in &file.definitions.structs {
-        output_struct(&mut header_file, configurations, &struct_definition)?;
+        output_struct(&mut header_file, configurations, struct_definition)?;
 
         // Add struct initializer
-        output_struct_initializer(&mut header_file, configurations, &struct_definition)?
+        output_struct_initializer(&mut header_file, configurations, struct_definition)?
     }
 
     // End & C++ guards
     // —————————————————
 
-    header_file.add_line(format!("#ifdef __cplusplus"));
-    header_file.add_line(format!("}}"));
-    header_file.add_line(format!("#endif /* __cplusplus */"));
+    header_file.add_line("#ifdef __cplusplus".to_string());
+    header_file.add_line("}".to_string());
+    header_file.add_line("#endif /* __cplusplus */".to_string());
     header_file.add_newline();
 
-    header_file.add_line(format!("#endif /* {0}_RUNE_H */", file.file_name.to_uppercase()));
+    header_file.add_line(format!("#endif /* {0}_RUNE_H */", file.name.to_uppercase()));
 
     // Output file
     // ————————————

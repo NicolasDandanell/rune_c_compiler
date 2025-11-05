@@ -1,7 +1,7 @@
 use rune_parser::{
     RuneFileDescription,
     scanner::NumericLiteral,
-    types::{ArraySize, DefineValue, FieldIndex, FieldType, StructDefinition, StructMember, UserDefinitionLink}
+    types::{ArraySize, ArrayType, DefineValue, FieldIndex, FieldType, Primitive, StructDefinition, StructMember, UserDefinitionLink}
 };
 
 use crate::{c_standard::CStandard, compile_error::CompilerError, output::*};
@@ -21,7 +21,7 @@ pub fn spaces(amount: usize) -> String {
 }
 
 /// Convert NamedVariable to named_variable
-pub fn pascal_to_snake_case(pascal: &String) -> String {
+pub fn pascal_to_snake_case(pascal: &str) -> String {
     let mut snake: String = String::with_capacity(0x40);
 
     for i in 0..pascal.len() {
@@ -38,7 +38,7 @@ pub fn pascal_to_snake_case(pascal: &String) -> String {
 }
 
 /// Convert NamedVariable to NAMED_VARIABLE
-pub fn pascal_to_uppercase(pascal: &String) -> String {
+pub fn pascal_to_uppercase(pascal: &str) -> String {
     let mut uppecase: String = String::with_capacity(0x40);
 
     for i in 0..pascal.len() {
@@ -176,65 +176,115 @@ impl CNumericValue for NumericLiteral {
     }
 }
 
-// Field type methods
-// ———————————————————
+// Primitive methods
+// ——————————————————
 
-pub trait CFieldType {
-    fn c_initializer(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
-    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
-    fn primitive_c_size(&self) -> Result<u64, CompilerError>;
+pub trait CPrimitive {
+    fn c_size(&self) -> u64;
+    fn c_initializer(&self, c_standard: &CStandard) -> String;
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
     fn to_c_type(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
 }
 
-impl CFieldType for FieldType {
+impl CPrimitive for Primitive {
+    fn c_size(&self) -> u64 {
+        match self {
+            Primitive::Bool | Primitive::Char | Primitive::I8 | Primitive::U8 => 1,
+
+            Primitive::I16 | Primitive::U16 => 2,
+
+            Primitive::F32 | Primitive::I32 | Primitive::U32 => 4,
+
+            Primitive::F64 | Primitive::I64 | Primitive::U64 => 8,
+
+            Primitive::I128 | Primitive::U128 => 16
+        }
+    }
+
+    fn c_initializer(&self, c_standard: &CStandard) -> String {
+        match self {
+            Primitive::Bool => match c_standard.allows_boolean() {
+                true => String::from("false"),
+                false => String::from("0")
+            },
+
+            Primitive::Char | Primitive::I8 | Primitive::U8 | Primitive::I16 | Primitive::U16 | Primitive::I32 | Primitive::U32 | Primitive::I64 | Primitive::U64 => String::from("0"),
+
+            Primitive::F32 | Primitive::F64 => String::from("0.0"),
+
+            // 128 bit integers are converted into 16 byte arrays in this implementation, due to lack of good 128 bit int support
+            Primitive::I128 | Primitive::U128 => String::from("{ 0 }")
+        }
+    }
+
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
+        match self {
+            Primitive::Bool
+            | Primitive::Char
+            | Primitive::I8
+            | Primitive::U8
+            | Primitive::I16
+            | Primitive::U16
+            | Primitive::F32
+            | Primitive::I32
+            | Primitive::U32
+            | Primitive::F64
+            | Primitive::I64
+            | Primitive::U64 => Ok(format!("{0} {1}{2}", self.to_c_type(c_standard)?, spaces(spacing), name)),
+
+            // 128 bit integers get converted into a byte array
+            Primitive::I128 | Primitive::U128 => Ok(format!("{0} {1}{2}[{3}]", Primitive::U8.to_c_type(c_standard)?, spaces(spacing), name, self.c_size()))
+        }
+    }
+
     fn to_c_type(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let string: String = match self {
             // 8 Bit
-            FieldType::Bool => String::from(match c_standard.allows_boolean() {
+            Primitive::Bool => String::from(match c_standard.allows_boolean() {
                 true => "bool",
                 false => "char"
             }),
-            FieldType::Char => String::from("char"),
-            FieldType::I8 => String::from(match c_standard.allows_integer_types() {
+            Primitive::Char => String::from("char"),
+            Primitive::I8 => String::from(match c_standard.allows_integer_types() {
                 true => "int8_t",
                 false => "signed char"
             }),
-            FieldType::U8 => String::from(match c_standard.allows_integer_types() {
+            Primitive::U8 => String::from(match c_standard.allows_integer_types() {
                 true => "uint8_t",
                 false => "unsigned char"
             }),
 
             // 16 Bit
-            FieldType::I16 => String::from(match c_standard.allows_integer_types() {
+            Primitive::I16 => String::from(match c_standard.allows_integer_types() {
                 true => "int16_t",
                 false => "signed short"
             }),
-            FieldType::U16 => String::from(match c_standard.allows_integer_types() {
+            Primitive::U16 => String::from(match c_standard.allows_integer_types() {
                 true => "uint16_t",
                 false => "unsigned short"
             }),
 
             // 32 Bit
-            FieldType::F32 => String::from("float"),
-            FieldType::I32 => String::from(match c_standard.allows_integer_types() {
+            Primitive::F32 => String::from("float"),
+            Primitive::I32 => String::from(match c_standard.allows_integer_types() {
                 true => "int32_t",
                 false => "signed long"
             }),
-            FieldType::U32 => String::from(match c_standard.allows_integer_types() {
+            Primitive::U32 => String::from(match c_standard.allows_integer_types() {
                 true => "uint32_t",
                 false => "unsigned long"
             }),
 
             // 64 Bit
-            FieldType::F64 => String::from("double"),
-            FieldType::I64 => String::from(match c_standard.allows_integer_types() {
+            Primitive::F64 => String::from("double"),
+            Primitive::I64 => String::from(match c_standard.allows_integer_types() {
                 true => "int64_t",
                 false => {
                     error!("Cannot guarantee 64 bit integers before C99 standard! Thus they are not allowed if using {0}", c_standard.to_string());
                     return Err(CompilerError::SourceAndCStandardMismatch);
                 }
             }),
-            FieldType::U64 => String::from(match c_standard.allows_integer_types() {
+            Primitive::U64 => String::from(match c_standard.allows_integer_types() {
                 true => "uint64_t",
                 false => {
                     error!("Cannot guarantee 64 bit integers before C99 standard! Thus they are not allowed if using {0}", c_standard.to_string());
@@ -243,116 +293,65 @@ impl CFieldType for FieldType {
             }),
 
             // 128 Bit - Devolve into unsigned 16 Byte arrays
-            FieldType::I128 | FieldType::U128 => FieldType::U8.to_c_type(c_standard)?,
-
-            FieldType::UserDefined(string) => format!("{0}_t", pascal_to_snake_case(string)),
-
-            // This will return the string of the underlying type
-            FieldType::Array(underlying_type, _) => underlying_type.to_c_type(c_standard)?,
-
-            FieldType::Empty => {
-                error!("Empty fields have no type!");
-                return Err(CompilerError::LogicError);
-            }
+            Primitive::I128 | Primitive::U128 => String::from(match c_standard.allows_integer_types() {
+                true => "uint8_t[16]",
+                false => "unsigned char[16]"
+            })
         };
         Ok(string)
     }
+}
 
-    fn create_c_variable(&self, name: &String, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
+// Array Type
+// ———————————
+
+pub trait CArrayType {
+    fn to_c_type(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
+}
+
+impl CArrayType for ArrayType {
+    fn to_c_type(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         match self {
-            FieldType::Bool
-            | FieldType::Char
-            | FieldType::I8
-            | FieldType::U8
-            | FieldType::I16
-            | FieldType::U16
-            | FieldType::F32
-            | FieldType::I32
-            | FieldType::U32
-            | FieldType::F64
-            | FieldType::I64
-            | FieldType::U64 => Ok(format!("{0} {1}{2}", self.to_c_type(c_standard)?, spaces(spacing), name)),
+            ArrayType::Primitive(primitive) => primitive.to_c_type(c_standard),
+            ArrayType::UserDefined(definition) => Ok(format!("{0}_t", pascal_to_snake_case(definition)))
+        }
+    }
+}
 
-            // 128 bit integers get converted into a byte array
-            FieldType::I128 | FieldType::U128 => Ok(format!(
-                "{0} {1}{2}[{3}]",
-                FieldType::U8.to_c_type(c_standard)?,
-                spaces(spacing),
-                name,
-                self.primitive_c_size()?.to_string()
-            )),
+// Field type methods
+// ———————————————————
 
+pub trait CFieldType {
+    fn c_initializer(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError>;
+}
+
+impl CFieldType for FieldType {
+    fn create_c_variable(&self, name: &str, spacing: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
+        match self {
+            FieldType::Primitive(primitive) => primitive.create_c_variable(name, spacing, c_standard),
             FieldType::UserDefined(string) => Ok(format!("{0}_t {1}{2}", pascal_to_snake_case(string), spaces(spacing), name)),
-            FieldType::Array(field_type, field_size) => Ok(format!("{0} {1}{2}[{3}]", field_type.to_c_type(c_standard)?, spaces(spacing), name, field_size.to_string())),
+            FieldType::Array(field_type, field_size) => Ok(format!("{0} {1}{2}[{3}]", field_type.to_c_type(c_standard)?, spaces(spacing), name, field_size)),
             FieldType::Empty => {
                 error!("Cannot create an empty field!");
-                return Err(CompilerError::LogicError);
+                Err(CompilerError::LogicError)
             }
         }
     }
 
-    // Size is calculated without padding, and is a guesstimate at best
-    fn primitive_c_size(&self) -> Result<u64, CompilerError> {
-        let value: u64 = match self {
-            FieldType::Bool | FieldType::Char | FieldType::I8 | FieldType::U8 => 1,
-
-            FieldType::I16 | FieldType::U16 => 2,
-
-            FieldType::F32 | FieldType::I32 | FieldType::U32 => 4,
-
-            FieldType::F64 | FieldType::I64 | FieldType::U64 => 8,
-
-            FieldType::I128 | FieldType::U128 => 16,
-
-            FieldType::Empty => 0,
-            _ => {
-                error!("Cannot call primitive_c_size() on an array or user defined type");
-                return Err(CompilerError::LogicError);
-            }
-        };
-        Ok(value)
-    }
-
     fn c_initializer(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let string = match self {
-            FieldType::Bool => match c_standard.allows_boolean() {
-                true => String::from("false"),
-                false => String::from("0")
-            },
-
-            FieldType::Char | FieldType::I8 | FieldType::U8 | FieldType::I16 | FieldType::U16 | FieldType::I32 | FieldType::U32 | FieldType::I64 | FieldType::U64 => String::from("0"),
-
-            FieldType::F32 | FieldType::F64 => String::from("0.0"),
-
-            // 128 bit integers are converted into 16 byte arrays in this implementation, due to lack of good 128 bit int support
-            FieldType::I128 | FieldType::U128 => String::from("{ 0 }"),
-
-            FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
-            FieldType::Array(field_type, _) => format!(
+            FieldType::Primitive(primitive) => primitive.c_initializer(c_standard),
+            FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(name)),
+            FieldType::Array(array_type, _) => format!(
                 "{{ {0} }}",
-                match field_type.as_ref() {
-                    FieldType::Bool => match c_standard.allows_boolean() {
-                        true => String::from("false"),
-                        false => String::from("0")
+                match array_type {
+                    // Special 128 bit case
+                    ArrayType::Primitive(primitive) if *primitive == Primitive::I128 || *primitive == Primitive::U128 => {
+                        String::from("0")
                     },
-                    FieldType::Char | FieldType::I8 | FieldType::U8 | FieldType::I16 | FieldType::U16 | FieldType::I32 | FieldType::U32 | FieldType::I64 | FieldType::U64 => String::from("0"),
-
-                    FieldType::I128 | FieldType::U128 => {
-                        error!("128 bit integer arrays are currently not supported. This is due to them requiring conversion into a byte array in many 32 bit systems");
-                        return Err(CompilerError::UnsupportedFeature);
-                    },
-
-                    FieldType::F32 | FieldType::F64 => String::from("0.0"),
-
-                    FieldType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(&name)),
-                    FieldType::Array(_, _) => {
-                        error!("Nested arrays are currently not supported");
-                        return Err(CompilerError::UnsupportedFeature);
-                    },
-                    FieldType::Empty => {
-                        error!("Cannot initialize an empty field!");
-                        return Err(CompilerError::LogicError);
-                    }
+                    ArrayType::Primitive(primitive) => primitive.c_initializer(c_standard),
+                    ArrayType::UserDefined(name) => format!("{0}_INIT", pascal_to_uppercase(name))
                 }
             ),
             FieldType::Empty => {
@@ -369,7 +368,7 @@ impl CFieldType for FieldType {
 
 pub trait CStructMember {
     fn c_size(&self) -> Result<u64, CompilerError>;
-    fn c_size_definition(&self, standard: &CStandard) -> Result<String, CompilerError>;
+    fn c_size_definition(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
     fn index_empty(index: u64) -> Result<StructMember, CompilerError>;
 }
 
@@ -395,41 +394,17 @@ impl CStructMember for StructMember {
         })
     }
 
-    fn c_size_definition(&self, standard: &CStandard) -> Result<String, CompilerError> {
+    fn c_size_definition(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
         let size_string: String = match &self.data_type {
-            FieldType::Bool
-            | FieldType::Char
-            | FieldType::I8
-            | FieldType::U8
-            | FieldType::I16
-            | FieldType::U16
-            | FieldType::F32
-            | FieldType::I32
-            | FieldType::U32
-            | FieldType::F64
-            | FieldType::I64
-            | FieldType::U64 => format!("sizeof({0})", self.data_type.to_c_type(standard)?),
-
-            // Default to 16 Byte array of uint8_t
-            FieldType::I128 | FieldType::U128 => format!("(sizeof({0}) * 16)", self.data_type.to_c_type(standard)?),
-
-            FieldType::UserDefined(type_name) => {
-                format!("sizeof({0}_t)", pascal_to_snake_case(&type_name))
-            },
-
+            FieldType::Primitive(primitive) => format!("sizeof({0})", primitive.to_c_type(c_standard)?),
+            FieldType::UserDefined(type_name) => format!("sizeof({0}_t)", pascal_to_snake_case(type_name)),
             FieldType::Array(array_type, array_size) => {
-                let type_string: String = match &(**array_type) {
-                    FieldType::Array(_, _) => {
-                        error!("Nested arrays are not currently supported!");
-                        return Err(CompilerError::UnsupportedFeature);
-                    },
-                    FieldType::UserDefined(name) => {
-                        format!("sizeof({0}_t)", pascal_to_snake_case(&name))
-                    },
-                    _ => format!("sizeof({0})", array_type.to_c_type(standard)?)
+                let type_string: String = match array_type {
+                    ArrayType::Primitive(primitive) => format!("sizeof({0})", primitive.to_c_type(c_standard)?),
+                    ArrayType::UserDefined(name) => format!("sizeof({0}_t)", pascal_to_snake_case(name))
                 };
 
-                format!("({0} * {1})", type_string, array_size.to_string())
+                format!("({0} * {1})", type_string, array_size)
             },
             FieldType::Empty => String::from("0")
         };
@@ -439,7 +414,7 @@ impl CStructMember for StructMember {
     fn c_size(&self) -> Result<u64, CompilerError> {
         match &self.data_type {
             // Calculate Array size based on (field type * field size)
-            FieldType::Array(array_field_type, field_size) => {
+            FieldType::Array(array_type, field_size) => {
                 // Get the array size first
                 let array_size: u64 = match field_size {
                     ArraySize::Integer(value, _) => *value,
@@ -459,20 +434,15 @@ impl CStructMember for StructMember {
                 };
 
                 // Parse the byte size based on the array type
-                let total_size: u64 = match *array_field_type.to_owned() {
-                    FieldType::Array(_, _) => {
-                        error!("Nested arrays not allowed at the moment");
-                        return Err(CompilerError::UnsupportedFeature);
-                    },
-
-                    // Parse the user defined type using the member user_definition_link
-                    FieldType::UserDefined(type_string) => match &self.user_definition_link {
+                let total_size: u64 = match array_type {
+                    ArrayType::Primitive(primitive) => primitive.c_size() * array_size,
+                    ArrayType::UserDefined(definition) => match &self.user_definition_link {
                         UserDefinitionLink::NoLink => {
-                            error!("Could not find definition for type {0} while parsing C size. This should not happen!", type_string);
+                            error!("Could not find definition for type {0} while parsing C size. This should not happen!", definition);
                             return Err(CompilerError::MalformedSource);
                         },
-                        UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.primitive_c_size()? * array_size,
-                        UserDefinitionLink::EnumLink(enum_definition) => enum_definition.backing_type.primitive_c_size()? * array_size,
+                        UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.c_size() * array_size,
+                        UserDefinitionLink::EnumLink(enum_definition) => enum_definition.backing_type.c_size() * array_size,
                         UserDefinitionLink::StructLink(struct_definition) => {
                             let mut struct_size: u64 = 0;
 
@@ -483,22 +453,20 @@ impl CStructMember for StructMember {
 
                             struct_size * array_size
                         }
-                    },
-
-                    // Primitives
-                    _ => array_field_type.primitive_c_size()? * array_size
+                    }
                 };
 
                 Ok(total_size)
             },
-
+            FieldType::Empty => Ok(0),
+            FieldType::Primitive(primitive) => Ok(primitive.c_size()),
             FieldType::UserDefined(name) => match &self.user_definition_link {
                 UserDefinitionLink::NoLink => {
                     error!("Found no definition link for item {0}!", name);
-                    return Err(CompilerError::MalformedSource);
+                    Err(CompilerError::MalformedSource)
                 },
-                UserDefinitionLink::BitfieldLink(bitfield_definition) => bitfield_definition.backing_type.primitive_c_size(),
-                UserDefinitionLink::EnumLink(enum_definition) => enum_definition.backing_type.primitive_c_size(),
+                UserDefinitionLink::BitfieldLink(bitfield_definition) => Ok(bitfield_definition.backing_type.c_size()),
+                UserDefinitionLink::EnumLink(enum_definition) => Ok(enum_definition.backing_type.c_size()),
                 UserDefinitionLink::StructLink(struct_definition) => {
                     let mut total_size: u64 = 0;
 
@@ -508,10 +476,7 @@ impl CStructMember for StructMember {
 
                     Ok(total_size)
                 }
-            },
-
-            // Primitives
-            _ => self.data_type.primitive_c_size()
+            }
         }
     }
 }
