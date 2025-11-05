@@ -2,13 +2,13 @@ use std::path::Path;
 
 use rune_parser::{
     scanner::NumericLiteral,
-    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, FieldType, StructDefinition, StructMember}
+    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, Primitive, StructDefinition, StructMember}
 };
 
 use crate::{
     RuneFileDescription,
     c_standard::CStandard,
-    c_utilities::{CConfigurations, CFieldType, CNumericValue, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    c_utilities::{CConfigurations, CFieldType, CNumericValue, CPrimitive, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile
@@ -30,11 +30,11 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     let mut big_endian_order: Vec<BitfieldMember> = Vec::with_capacity(bitfield_definition.members.len());
 
     // Get the backing type with signed and unsigned variants
-    let backing_type: (FieldType, FieldType) = match bitfield_definition.backing_type {
-        FieldType::I8 | FieldType::U8 => (FieldType::U8, FieldType::I8),
-        FieldType::I16 | FieldType::U16 => (FieldType::U16, FieldType::I16),
-        FieldType::I32 | FieldType::U32 => (FieldType::U32, FieldType::I32),
-        FieldType::I64 | FieldType::U64 => (FieldType::U64, FieldType::I64),
+    let backing_type: (Primitive, Primitive) = match bitfield_definition.backing_type {
+        Primitive::I8 | Primitive::U8 => (Primitive::U8, Primitive::I8),
+        Primitive::I16 | Primitive::U16 => (Primitive::U16, Primitive::I16),
+        Primitive::I32 | Primitive::U32 => (Primitive::U32, Primitive::I32),
+        Primitive::I64 | Primitive::U64 => (Primitive::U64, Primitive::I64),
         _ => {
             error!("Only integer type primitives can back bitfields");
             return Err(CompilerError::MalformedSource);
@@ -53,7 +53,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
 
     let padding: BitfieldMember = BitfieldMember {
         identifier: String::from("padding"),
-        size:       BitSize::Unsigned((bitfield_definition.backing_type.primitive_c_size()? * 8) - total_size),
+        size:       BitSize::Unsigned((bitfield_definition.backing_type.c_size() * 8) - total_size),
         index:      0, // Does not matter
         comment:    Some(String::from(" Padding to ensure proper alignment "))
     };
@@ -297,7 +297,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
 
         // Check if the value is large enough to trigger the desired backing type
         if needs_backing_value {
-            if enum_member.value.requires_size() == enum_definition.backing_type.primitive_c_size()? {
+            if enum_member.value.requires_size() == enum_definition.backing_type.c_size() {
                 needs_backing_value = false;
             }
         }
@@ -325,7 +325,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
         header_file.add_line(format!(
             "    {0}_SIZE_RESERVE_VALUE = {1}",
             pascal_to_uppercase(&enum_definition.name),
-            match enum_definition.backing_type.primitive_c_size()? {
+            match enum_definition.backing_type.c_size() {
                 0 => "0",
                 1 => "0xFF",
                 2 => "0xFFFF",
@@ -550,7 +550,7 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
             true => String::new(),
             false => format!("/{0}", file.relative_path)
         },
-        file.file_name
+        file.name
     );
 
     let mut header_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), h_file_string);
@@ -563,8 +563,8 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // Start & C++ guards
     // ———————————————————
 
-    header_file.add_line(format!("#ifndef {0}_RUNE_H", file.file_name.to_uppercase()));
-    header_file.add_line(format!("#define {0}_RUNE_H", file.file_name.to_uppercase()));
+    header_file.add_line(format!("#ifndef {0}_RUNE_H", file.name.to_uppercase()));
+    header_file.add_line(format!("#define {0}_RUNE_H", file.name.to_uppercase()));
     header_file.add_newline();
 
     header_file.add_line(format!("#ifdef __cplusplus"));
@@ -638,7 +638,7 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     header_file.add_line(format!("#endif /* __cplusplus */"));
     header_file.add_newline();
 
-    header_file.add_line(format!("#endif /* {0}_RUNE_H */", file.file_name.to_uppercase()));
+    header_file.add_line(format!("#endif /* {0}_RUNE_H */", file.name.to_uppercase()));
 
     // Output file
     // ————————————

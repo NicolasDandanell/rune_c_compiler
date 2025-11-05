@@ -84,10 +84,10 @@ fn main() -> Result<(), CompilerError> {
     let output_path: &Path = Path::new(args.output_folder.as_str());
     let configurations: CompileConfigurations = CompileConfigurations {
         c_standard,
-        pack_data:     args.pack_data,
+        pack_data: args.pack_data,
         pack_metadata: args.pack_metadata,
-        section:       args.data_section,
-        sort:          !args.unsorted
+        section: args.data_section,
+        sort: !args.unsorted
     };
 
     // Validate arguments
@@ -134,7 +134,7 @@ pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: 
     // Create source and header files matching the Rune files
     info!("Outputting headers and sources for:");
     for file in &file_descriptions {
-        info!("    {0}{1}.rune", file.relative_path, file.file_name);
+        info!("    {0}{1}.rune", file.relative_path, file.name);
 
         // Create header file
         output_header(&file, &c_configurations, output_path)?;

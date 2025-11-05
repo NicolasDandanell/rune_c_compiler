@@ -7,7 +7,7 @@ pub fn enable_silent() {
 }
 
 pub fn is_silent() -> bool {
-    unsafe { return SILENT }
+    unsafe { SILENT }
 }
 
 // Reset  - "\u{001B}[0m"

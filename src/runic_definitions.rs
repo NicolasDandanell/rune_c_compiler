@@ -2,12 +2,12 @@ use std::path::Path;
 
 use rune_parser::{
     RuneFileDescription,
-    types::{FieldType, StructDefinition}
+    types::{Primitive, StructDefinition}
 };
 
 use crate::{
     c_standard::CStandard,
-    c_utilities::{CConfigurations, CFieldType, pascal_to_uppercase, spaces},
+    c_utilities::{CConfigurations, CPrimitive, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile
@@ -15,10 +15,10 @@ use crate::{
 
 fn type_from_size(size: usize, c_standard: &CStandard) -> Result<String, CompilerError> {
     match size {
-        1 => FieldType::U8.to_c_type(c_standard),
-        2 => FieldType::U16.to_c_type(c_standard),
-        4 => FieldType::U32.to_c_type(c_standard),
-        8 => FieldType::U64.to_c_type(c_standard),
+        1 => Primitive::U8.to_c_type(c_standard),
+        2 => Primitive::U16.to_c_type(c_standard),
+        4 => Primitive::U32.to_c_type(c_standard),
+        8 => Primitive::U64.to_c_type(c_standard),
         _ => {
             error!("Invalid type size given! This should not be possible");
             return Err(CompilerError::LogicError);
@@ -144,10 +144,8 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!("// ———————————————————"));
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS    0x1F"));
-    definitions_file.add_line(format!("#define RUNE_NO_PARSER           0xFF"));
-    definitions_file.add_line(format!("#define RUNE_TRANSPORT_TYPE_BITS 0xE0"));
-    definitions_file.add_line(format!("#define RUNE_VERIFICATION_FIELD  0x1F"));
+    definitions_file.add_line(format!("#define RUNE_FIELD_INDEX_BITS 0x1F"));
+    definitions_file.add_line(format!("#define RUNE_PACKAGING_BITS   0xE0"));
     definitions_file.add_newline();
 
     definitions_file.add_line(format!("// Configuration dependent definitions"));

@@ -18,7 +18,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             true => String::new(),
             false => format!("/{0}", file.relative_path)
         },
-        file.file_name
+        file.name
     );
 
     let mut source_file: OutputFile = OutputFile::new(String::from(output_path.to_str().unwrap()), c_file_string);
@@ -31,7 +31,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
     // Include own header
     // ———————————————————
 
-    source_file.add_line(format!("#include \"{0}.rune.h\"", file.file_name));
+    source_file.add_line(format!("#include \"{0}.rune.h\"", file.name));
     source_file.add_newline();
 
     // Include rune.h
@@ -113,8 +113,6 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             index_sorted_members.push(member);
         }
 
-
-
         // Handle field descriptors
         // —————————————————————————
 
@@ -162,7 +160,14 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
         }
 
         source_file.add_line(format!("const rune_descriptor_t RUNIC_PARSER {0}_descriptor = {{", struct_name));
-        source_file.add_line(format!("    {0}.descriptor_flags     {1}={2} 0b{3:0members$b},", comment_start, space, comment_end, descriptor_flags, members = member_count as usize));
+        source_file.add_line(format!(
+            "    {0}.descriptor_flags     {1}={2} 0b{3:0members$b},",
+            comment_start,
+            space,
+            comment_end,
+            descriptor_flags,
+            members = member_count as usize
+        ));
         source_file.add_line(format!("    {0}.field_descriptors    {1}={2} {3},", comment_start, space, comment_end, descriptor_list_initializer));
         source_file.add_line(format!("    {0}.size                 {1}={2} sizeof({3}_t),", comment_start, space, comment_end, struct_name));
         source_file.add_line(format!("    {0}.largest_field        {1}={2} {3},", comment_start, space, comment_end, highest_index));
