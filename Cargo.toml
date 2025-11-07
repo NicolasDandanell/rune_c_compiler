@@ -5,7 +5,7 @@ license     = "MIT"
 name        = "rune_c_compiler"
 readme      = "README.MD"
 repository  = "https://github.com/NicolasDandanell/rune_c_compiler"
-version     = "0.4.0"
+version     = "0.4.1"
 
 [[bin]]
 name = "rune_c_compiler"
@@ -13,4 +13,4 @@ path = "src/main.rs"
 
 [dependencies]
 clap        = { version = "4.5.50", features = ["derive"] }
-rune_parser = { version = "0.6.1" }
+rune_parser = { version = "0.6.0" }
