@@ -26,3 +26,5 @@ Path to folder where the _.rune_ files are located. The compiler will automatica
 * __--silent (-s)__ Optional argument to specify whether the program should avoid printing any info output at all. By default info output is printed
 
 * __--c_standard (-s)__ Optional argument which specifies which C standard the output source should comply with. By default it compiles to C23 standard
+
+* __--debug__ Optional argument which enables the output of debug messages. Used mostly for bug-finding and developing on the compiler.
