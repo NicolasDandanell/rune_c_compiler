@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+use crate::{compile_error::CompilerError, output::*};
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum CStandard {
     // C90 is an alias for C89
@@ -12,7 +14,7 @@ pub enum CStandard {
 }
 
 impl CStandard {
-    pub fn from_string(string: &str) -> Result<CStandard, ()> {
+    pub fn from_string(string: &str) -> Result<CStandard, CompilerError> {
         match string {
             "c89" | "C89" | "c90" | "C90" => Ok(CStandard::C89),
             "c95" | "C95" => Ok(CStandard::C95),
@@ -20,11 +22,14 @@ impl CStandard {
             "c11" | "C11" => Ok(CStandard::C11),
             "c17" | "C17" => Ok(CStandard::C17),
             "c23" | "C23" => Ok(CStandard::C23),
-            _ => Err(())
+            _ => {
+                error!("Invalid C Standard passed. Got {0}, and valid values are: {1}", string, CStandard::valid_values());
+                Err(CompilerError::InvalidArgument)
+            }
         }
     }
 
-    pub fn valid_values() -> String {
+    fn valid_values() -> String {
         String::from("C89/C90, C95, C99, C11, C17, C23")
     }
 

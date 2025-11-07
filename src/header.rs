@@ -350,7 +350,7 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
     header_file.add_line(format!("typedef struct RUNIC_STRUCT {0} {{", struct_name));
 
     // Sorted list --> Then use sorted list instead of other one
-    let sorted_member_list: Vec<StructMember> = struct_definition.sort_members()?;
+    let sorted_member_list: Vec<StructMember> = struct_definition.sort_members(&configurations.compiler_configurations)?;
 
     // >>> Spacing of struct members does not look good, and will thus be dropped <<<
 
@@ -371,7 +371,7 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
     for member in &sorted_member_list {
         // Member comment
         if member.comment.is_some() {
-            if is_first {
+            if !is_first {
                 header_file.add_newline();
             }
             header_file.add_line(format!("    /**{0}*/", member.comment.as_ref().unwrap()));
@@ -399,7 +399,7 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
 
     let mut pre_equal_length: usize = 0;
 
-    let sorted_member_list: Vec<StructMember> = struct_definition.sort_members()?;
+    let sorted_member_list: Vec<StructMember> = struct_definition.sort_members(&configurations.compiler_configurations)?;
 
     // Calculate spacing for aligning the '=' sign
     // ————————————————————————————————————————————

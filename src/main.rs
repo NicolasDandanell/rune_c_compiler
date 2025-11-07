@@ -2,6 +2,7 @@
 // Declare first because of macros
 mod output;
 
+mod architecture;
 mod c_standard;
 mod c_utilities;
 mod compile_error;
@@ -16,6 +17,7 @@ use clap::Parser;
 use rune_parser::{RuneFileDescription, parser_rune_files};
 
 use crate::{
+    architecture::Architecture,
     c_standard::CStandard,
     c_utilities::{CConfigurations, CompileConfigurations},
     compile_error::CompilerError,
@@ -35,6 +37,10 @@ struct Args {
     /// Path of folder where to output source code
     #[arg(long, short = 'o')]
     output_folder: String,
+
+    /// Target architecture to optimize for - Defaults to 32 bit
+    #[arg(long, short = 'a', default_value = "32")]
+    architecture: usize,
 
     /// Whether to pack (remove padding) from outputted sources - Defaults to false
     #[arg(long, short = 'p', default_value = "false")]
@@ -72,22 +78,16 @@ fn main() -> Result<(), CompilerError> {
         enable_silent();
     };
 
-    let c_standard: CStandard = match CStandard::from_string(&args.c_standard) {
-        Err(_) => {
-            error!("Invalid C Standard passed. Got {0}, and valid values are: {1}", args.c_standard, CStandard::valid_values());
-            return Err(CompilerError::InvalidArgument);
-        },
-        Ok(value) => value
-    };
-
     let input_path: &Path = Path::new(args.input_folder.as_str());
     let output_path: &Path = Path::new(args.output_folder.as_str());
+
     let configurations: CompileConfigurations = CompileConfigurations {
-        c_standard,
-        pack_data: args.pack_data,
+        architecture:  Architecture::from_value(args.architecture)?,
+        c_standard:    CStandard::from_string(&args.c_standard)?,
+        pack_data:     args.pack_data,
         pack_metadata: args.pack_metadata,
-        section: args.data_section,
-        sort: !args.unsorted
+        section:       args.data_section,
+        sort:          !args.unsorted
     };
 
     // Validate arguments
