@@ -4,7 +4,7 @@ use rune_parser::{
     types::{ArraySize, ArrayType, DefineValue, FieldIndex, FieldType, Primitive, StructDefinition, StructMember, UserDefinitionLink}
 };
 
-use crate::{c_standard::CStandard, compile_error::CompilerError, output::*};
+use crate::{architecture::Architecture, c_standard::CStandard, compile_error::CompilerError, output::*};
 
 // String helper functions
 // ————————————————————————
@@ -59,6 +59,9 @@ pub fn pascal_to_uppercase(pascal: &str) -> String {
 
 #[derive(Debug, Clone)]
 pub struct CompileConfigurations {
+    /// Which architecture to optimize for
+    pub architecture: Architecture,
+
     /// Whether or not to pack message data structures
     pub pack_data: bool,
 
@@ -486,19 +489,92 @@ impl CStructMember for StructMember {
 
 pub trait CStructDefinition {
     fn estimate_size(&self, configurations: &CompileConfigurations) -> Result<u64, CompilerError>;
-    fn sort_members(&self) -> Result<Vec<StructMember>, CompilerError>;
+    fn sort_members(&self, configurations: &CompileConfigurations) -> Result<Vec<StructMember>, CompilerError>;
+}
+
+#[derive(Clone, Debug)]
+struct SizedStructMember {
+    member: StructMember,
+    size:   u64
+}
+
+impl SizedStructMember {
+    fn new(member: &StructMember, size: u64) -> SizedStructMember {
+        SizedStructMember { member: member.clone(), size }
+    }
+}
+
+/// Sort the non-aligned members based on the architecture
+fn sort_non_aligned(non_aligned: &mut Vec<SizedStructMember>, configurations: &CompileConfigurations) {
+    // Try to fit small non-aligned members in spaces between the bigger members
+    // ——————————————————————————————————————————————————————————————————————————
+
+    let sorting_value: u64 = configurations.architecture.byte_size() as u64;
+
+    let mut large_values: Vec<SizedStructMember> = Vec::with_capacity(0x20);
+    let mut small_values: Vec<SizedStructMember> = Vec::with_capacity(0x20);
+
+    // Sort all values into large and small items
+    for member in &*non_aligned {
+        if member.size > sorting_value {
+            large_values.push(member.clone());
+        } else {
+            small_values.push(member.clone());
+        }
+    }
+
+    // Clear old list
+    non_aligned.clear();
+
+    for large in large_values {
+        non_aligned.push(large.clone());
+
+        let leftover_bytes: u64 = sorting_value - (large.size % sorting_value);
+        let mut best_found_index: isize = -1;
+        let mut best_found_size: u64 = sorting_value;
+
+        debug!(
+            "    Handling large unaligned field {0} with index {1}, size {2}, and leftover {3}",
+            large.member.identifier,
+            large.member.index.value(),
+            large.size,
+            leftover_bytes
+        );
+
+        // Try to find a value that fits perfectly. If none found, take the one that fits best
+        for (list_index, small) in small_values.iter().enumerate() {
+            if (small.size <= leftover_bytes) && (leftover_bytes - small.size < best_found_size) {
+                debug!("        Found new best in {0} with a size {1}", small.member.identifier, small.size);
+                best_found_size = leftover_bytes - small.size;
+                best_found_index = list_index as isize;
+            }
+        }
+
+        // What to do if no values match ???
+        if best_found_index < 0 {
+            continue;
+        } else {
+            non_aligned.push(small_values[best_found_index as usize].clone());
+            small_values.remove(best_found_index as usize);
+        }
+    }
+
+    for remaining_small_value in small_values {
+        non_aligned.push(remaining_small_value);
+    }
 }
 
 impl CStructDefinition for StructDefinition {
     /// Sort the members of a struct based on their size alignment to reduce eventual padding
-    fn sort_members(&self) -> Result<Vec<StructMember>, CompilerError> {
+    fn sort_members(&self, configurations: &CompileConfigurations) -> Result<Vec<StructMember>, CompilerError> {
         let mut full_list: Vec<StructMember> = Vec::with_capacity(0x20);
 
-        let mut aligned_8: Vec<(StructMember, u64)> = Vec::with_capacity(0x20);
-        let mut aligned_4: Vec<(StructMember, u64)> = Vec::with_capacity(0x20);
-        let mut aligned_2: Vec<(StructMember, u64)> = Vec::with_capacity(0x20);
-        let mut aligned_1: Vec<(StructMember, u64)> = Vec::with_capacity(0x20);
+        let mut aligned_8: Vec<SizedStructMember> = Vec::with_capacity(0x20);
+        let mut aligned_4: Vec<SizedStructMember> = Vec::with_capacity(0x20);
+        let mut aligned_2: Vec<SizedStructMember> = Vec::with_capacity(0x20);
+        let mut aligned_1: Vec<SizedStructMember> = Vec::with_capacity(0x20);
 
+        // Attempt to maintain index order wherever it makes sense
         for member in &self.members {
             let size: u64 = member.c_size()?;
 
@@ -508,29 +584,30 @@ impl CStructDefinition for StructDefinition {
                 continue;
             }
 
-            if size % 8 == 0 {
+            // Align by 8 only if platform is 64 bit. If building for a 32 bit platform sorting by 8 is pointless
+            if size % 8 == 0 && configurations.architecture == Architecture::_64Bit {
                 // First 8 aligned
-                aligned_8.push((member.clone(), size));
+                aligned_8.push(SizedStructMember::new(member, size));
             } else if member.c_size()? % 4 == 0 {
                 // First 4 aligned
-                aligned_4.push((member.clone(), size));
+                aligned_4.push(SizedStructMember::new(member, size));
             } else if member.c_size()? % 2 == 0 {
                 // First 2 aligned
-                aligned_2.push((member.clone(), size));
+                aligned_2.push(SizedStructMember::new(member, size));
             } else {
                 // Lastly non aligned
-                aligned_1.push((member.clone(), size));
+                aligned_1.push(SizedStructMember::new(member, size));
             }
         }
 
-        // Sort the 1 aligned members by size
-        aligned_1.sort_by(|a, b| b.1.cmp(&a.1));
+        // Sort the non-aligned members to allow efficient packing
+        sort_non_aligned(&mut aligned_1, configurations);
 
         // Append all member elements into the full sorted list
-        full_list.append(&mut aligned_8.into_iter().map(|(member, _)| member).collect());
-        full_list.append(&mut aligned_4.into_iter().map(|(member, _)| member).collect());
-        full_list.append(&mut aligned_2.into_iter().map(|(member, _)| member).collect());
-        full_list.append(&mut aligned_1.into_iter().map(|(member, _)| member).collect());
+        full_list.append(&mut aligned_8.into_iter().map(|sized_member| sized_member.member).collect());
+        full_list.append(&mut aligned_4.into_iter().map(|sized_member| sized_member.member).collect());
+        full_list.append(&mut aligned_2.into_iter().map(|sized_member| sized_member.member).collect());
+        full_list.append(&mut aligned_1.into_iter().map(|sized_member| sized_member.member).collect());
 
         Ok(full_list)
     }
@@ -539,7 +616,7 @@ impl CStructDefinition for StructDefinition {
         // println!("Estimating size of {0}", struct_definition.name);
 
         let struct_list: Vec<StructMember> = match configurations.sort {
-            true => self.sort_members()?,
+            true => self.sort_members(configurations)?,
             false => self.members.clone()
         };
 
