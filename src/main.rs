@@ -64,7 +64,11 @@ struct Args {
 
     /// Specifies which C standard the output source should comply with - Defaults to C23
     #[arg(long, short = 'c', default_value = "C23")]
-    c_standard: String
+    c_standard: String,
+
+    /// Whether to run the compiler in debug mode, which has significantly increases the number of output messages
+    #[arg(long, default_value = "false")]
+    debug: bool
 }
 
 fn main() -> Result<(), CompilerError> {
@@ -77,6 +81,11 @@ fn main() -> Result<(), CompilerError> {
     if args.silent {
         enable_silent();
     };
+
+    // Enable debug messages
+    if args.debug {
+        enable_debug();
+    }
 
     let input_path: &Path = Path::new(args.input_folder.as_str());
     let output_path: &Path = Path::new(args.output_folder.as_str());

@@ -1,4 +1,5 @@
 static mut SILENT: bool = false;
+static mut DEBUG: bool = false;
 
 pub fn enable_silent() {
     unsafe {
@@ -6,8 +7,18 @@ pub fn enable_silent() {
     }
 }
 
+pub fn enable_debug() {
+    unsafe {
+        DEBUG = true;
+    }
+}
+
 pub fn is_silent() -> bool {
     unsafe { SILENT }
+}
+
+pub fn is_debugging() -> bool {
+    unsafe { DEBUG }
 }
 
 // Reset  - "\u{001B}[0m"
@@ -21,9 +32,20 @@ pub fn is_silent() -> bool {
 // White  - "\u{001B}[0;37m"
 
 #[macro_export]
+macro_rules! debug {
+    ($($value: expr), *) => {
+        if !is_silent() && is_debugging() {
+            print!("\u{001B}[0;32m");
+            print!($($value),*);
+            println!("\u{001B}[0m");
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! info {
     ($($value: expr), *) => {
-        if !is_silent(){
+        if !is_silent() {
             println!($($value),*);
         }
     };
@@ -32,7 +54,7 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warning {
     ($($value: expr), *) => {
-        if !is_silent(){
+        if !is_silent() {
             print!("\u{001B}[0;33m");
             print!($($value),*);
             println!("\u{001B}[0m");
@@ -43,7 +65,7 @@ macro_rules! warning {
 #[macro_export]
 macro_rules! error {
     ($($value: expr), *) => {
-        if !is_silent(){
+        if !is_silent() {
             eprint!("\u{001B}[0;31m");
             eprint!($($value),*);
             eprintln!("\u{001B}[0m");
