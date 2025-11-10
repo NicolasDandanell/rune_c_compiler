@@ -207,10 +207,11 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             };
 
             source_file.add_line(format!(
-                "    /*  {0}{1}{2}: {3}{4}{5} */ {{",
+                "    /*  {0}{1}{2}: {3}{4}{5}{6} */ {{",
                 comment_spacing,
                 init_char,
                 member_name,
+                spaces(1 - init_char.len()),
                 spaces(spacing),
                 verification_string,
                 counter
