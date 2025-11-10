@@ -9,7 +9,7 @@ Currently this program needs to be compiled from source to be used by the main R
 To use the Rune C compiler, simply specify the following parameters:
 
 * __--input_folder (-i) <path_to_input_folder>__ -
-Path to folder where the _.rune_ files are located. The compiler will automatically search subfolders recursively for more _.rune_ files.
+Path to folder where the _.rune_ files are located. The compiler will automatically search subfolders recursively for more _.rune_ files. Can be passed multiple times if rune files are spread over multiple different directories.
 
 * __--output_folder (-o) <path_to_input_folder>__ - Path where to output the generated C source files. They will keep the same folder structure as where they were found within the input folder.
 

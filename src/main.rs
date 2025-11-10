@@ -30,9 +30,9 @@ use crate::{
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Path of folder where to find Rune files
+    /// Path of folder where to find Rune files (subfolders will also be searched). Can be passed multiple times if files are spread over multiple different directories.
     #[arg(long, short = 'i')]
-    input_folder: String,
+    input_folder: Vec<String>,
 
     /// Path of folder where to output source code
     #[arg(long, short = 'o')]
@@ -87,7 +87,23 @@ fn main() -> Result<(), CompilerError> {
         enable_debug();
     }
 
-    let input_path: &Path = Path::new(args.input_folder.as_str());
+    let input_paths: Vec<&Path> = {
+        let mut input_paths = Vec::with_capacity(0x10);
+
+        for folder in &args.input_folder {
+            let path = Path::new(folder.as_str());
+
+            // If input folder does not exist, return an error
+            if !path.exists() {
+                error!("Input path \"{0}\" invalid!", folder);
+                return Err(CompilerError::InvalidInputPath);
+            }
+
+            input_paths.push(path);
+        }
+
+        input_paths
+    };
     let output_path: &Path = Path::new(args.output_folder.as_str());
 
     let configurations: CompileConfigurations = CompileConfigurations {
@@ -102,12 +118,6 @@ fn main() -> Result<(), CompilerError> {
     // Validate arguments
     // ———————————————————
 
-    // If input folder does not exist, return an error
-    if !input_path.exists() {
-        error!("Input path invalid!");
-        return Err(CompilerError::InvalidInputPath);
-    }
-
     // If output folder does exist, create it
     if !output_path.is_dir()
         && let Err(error) = create_dir(output_path)
@@ -116,7 +126,7 @@ fn main() -> Result<(), CompilerError> {
         return Err(CompilerError::FileSystemError(error));
     }
 
-    let definitions_list: Vec<RuneFileDescription> = match parser_rune_files(input_path, true, false) {
+    let definitions_list: Vec<RuneFileDescription> = match parser_rune_files(&input_paths, true, false) {
         Ok(value) => value,
         Err(error) => {
             error!("Could not parser Rune files! Got error {0:?}", error);
