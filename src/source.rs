@@ -94,17 +94,19 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 if listed_index == i {
                     member = listed_member.clone();
 
-                    // Check name length for spacing
-                    if pascal_to_snake_case(&member.identifier).len() > longest_member_name_size {
-                        longest_member_name_size = pascal_to_snake_case(&member.identifier).len()
-                    }
-
                     // Check to see if it's a nested message, and add descriptor if so
                     if let UserDefinitionLink::StructLink(link) = &member.user_definition_link {
                         descriptor_list.push(pascal_to_snake_case(&link.name));
                         descriptor_flags += 1 << member.index.value();
                     }
                 }
+            }
+
+            let not_empty: bool = member.data_type != FieldType::Empty;
+
+            // Check name length for spacing (Done here to include "(empty)" members)
+            if pascal_to_snake_case(&member.identifier).len() + not_empty as usize > longest_member_name_size {
+                longest_member_name_size = pascal_to_snake_case(&member.identifier).len() + not_empty as usize;
             }
 
             index_sorted_members.push(member);
@@ -175,9 +177,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
         for (counter, member) in index_sorted_members.iter().enumerate() {
             let member_name: String = pascal_to_snake_case(&member.identifier);
-            let spacing: usize = longest_member_name_size - member_name.len();
-
-            //  println!("Got spacing {0} from longest member size {1}", spacing, longest_member_name_size);
+            let spacing: usize = longest_member_name_size - member_name.len() - (member.data_type != FieldType::Empty) as usize;
 
             let init_char: String = match &member.data_type {
                 FieldType::Empty => String::new(),
@@ -207,11 +207,10 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             };
 
             source_file.add_line(format!(
-                "    /*  {0}{1}{2}: {3}{4}{5}{6} */ {{",
+                "    /*  {0}{1}{2}: {3}{4}{5} */ {{",
                 comment_spacing,
                 init_char,
                 member_name,
-                spaces(1 - init_char.len()),
                 spaces(spacing),
                 verification_string,
                 counter
