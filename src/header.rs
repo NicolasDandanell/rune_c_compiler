@@ -2,13 +2,13 @@ use std::path::Path;
 
 use rune_parser::{
     scanner::NumericLiteral,
-    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, Primitive, StructDefinition, StructMember}
+    types::{BitSize, BitfieldDefinition, BitfieldMember, DefineDefinition, DefineValue, EnumDefinition, MessageDefinition, MessageField, Primitive, StructDefinition, StructMember}
 };
 
 use crate::{
     RuneFileDescription,
-    c_standard::CStandard,
-    c_utilities::{CConfigurations, CFieldType, CNumericValue, CPrimitive, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    c_configuration::{CConfigurations, CStandard},
+    c_utilities::{CMessageDefinition, CMessageField, CNumericValue, CPrimitive, CStructDefinition, CStructMember, pascal_to_snake_case, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile
@@ -84,7 +84,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     // ————————————————————
 
     header_file.add_line(String::from("#if defined __LITTLE_ENDIAN__"));
-    header_file.add_line(format!("typedef struct RUNIC_BITFIELD {0} {{", bitfield_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
 
     // Comment
     if bitfield_definition.comment.is_some() {
@@ -139,7 +139,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     // —————————————————
 
     header_file.add_line(String::from("#elif defined __BIG_ENDIAN__"));
-    header_file.add_line(format!("typedef struct RUNIC_BITFIELD {0} {{", bitfield_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
 
     // Comment
     if bitfield_definition.comment.is_some() {
@@ -248,7 +248,8 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
     let mut needs_backing_value: bool = !allow_backing_type;
 
     header_file.add_line(format!(
-        "typedef enum RUNIC_ENUM {0}{1} {{",
+        "typedef enum {0}{1}{2} {{",
+        configurations.attributes.enum_attributes,
         enum_name,
         match allow_backing_type {
             false => String::from(""),
@@ -336,7 +337,210 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
     Ok(())
 }
 
-/// Output a struct into the header file
+/// Output a message into the header file
+fn output_message(header_file: &mut OutputFile, configurations: &CConfigurations, struct_definition: &MessageDefinition) -> Result<Vec<MessageField>, CompilerError> {
+    let c_standard = &configurations.compiler_configurations.c_standard;
+
+    // Print comment if present
+    if let Some(comment) = &struct_definition.comment {
+        header_file.add_line(format!("/**{0}*/", comment))
+    }
+
+    let message_name: String = pascal_to_snake_case(&struct_definition.name);
+
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.message_attributes, message_name));
+
+    // Sorted field list --> Then use sorted list instead of the one in the definition
+    let sorted_field_list: Vec<MessageField> = struct_definition.size_sort_fields(&configurations.compiler_configurations)?;
+
+    // >>> Spacing of message fields does not look good, and will thus be dropped <<<
+
+    // Get type sizes for spacing reasons
+    // let mut longest_type: usize = 0;
+    //
+    // for field in &sorted_field_list {
+    //     if field.field_type.to_c_type().len() > longest_type {
+    //         longest_type = field.field_type.to_c_type().len();
+    //     }
+    // }
+
+    // >>> end <<<
+
+    let mut is_first: bool = true;
+
+    // Print all message fields
+    for field in &sorted_field_list {
+        // Field comment
+        if field.comment.is_some() {
+            if !is_first {
+                header_file.add_newline();
+            }
+            header_file.add_line(format!("    /**{0}*/", field.comment.as_ref().unwrap()));
+        }
+
+        let spacing: usize = 0;
+
+        header_file.add_line(format!("    {0};", field.create_c_variable(spacing, c_standard)?));
+
+        is_first = false;
+    }
+
+    header_file.add_line(format!("}} {0}_t;", message_name));
+    header_file.add_newline();
+
+    header_file.add_line(format!("extern const rune_descriptor_t {0}_descriptor;", message_name));
+    header_file.add_newline();
+
+    Ok(sorted_field_list)
+}
+
+fn output_message_metadata(output_file: &mut OutputFile, configurations: &CConfigurations, message_definition: &MessageDefinition) -> Result<(), CompilerError> {
+    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
+
+    let mut pre_equal_length: usize = 0;
+
+    let size_sorted_field_list: Vec<MessageField> = message_definition.size_sort_fields(&configurations.compiler_configurations)?;
+
+    // Calculate spacing for aligning the '=' sign
+    // ————————————————————————————————————————————
+
+    for field in &size_sorted_field_list {
+        if field.identifier.len() > pre_equal_length {
+            pre_equal_length = field.identifier.len();
+        }
+    }
+
+    // Calculate the space for aligning the '\' at the end
+    // ————————————————————————————————————————————————————
+
+    let initializer_string: String = format!(
+        "#define {0}_INIT ({1}_t) {{{2}",
+        pascal_to_uppercase(&message_definition.name),
+        pascal_to_snake_case(&message_definition.name),
+        spaces(0)
+    );
+
+    let mut pre_newline_length: usize = initializer_string.len();
+
+    // Calculate spacing for after the newline
+    for i in 0..size_sorted_field_list.len() {
+        let field: &MessageField = &size_sorted_field_list[i];
+
+        let is_last: bool = i != size_sorted_field_list.len() - 1;
+
+        let pre_equal: usize = pre_equal_length - field.identifier.len();
+
+        let comma = match is_last {
+            true => ",",
+            false => ""
+        };
+
+        let string: String = match c_standard.allows_designated_initializers() {
+            true => format!("    .{0}{1} = {2}{3} {4}\\", field.identifier, spaces(pre_equal), field.c_initializer(c_standard)?, comma, ""),
+            false => format!("    {0}{1} {2}\\", field.c_initializer(c_standard)?, comma, "")
+        };
+
+        // I don't know why the -2 is needed, but it does not work without it
+        if string.len() - 2 > pre_newline_length {
+            pre_newline_length = string.len() - 2;
+        }
+    }
+
+    // 20 seems to be the number of fixed characters on the define string
+    let define_size: usize = 20 + pascal_to_uppercase(&message_definition.name).len() + pascal_to_snake_case(&message_definition.name).len();
+
+    output_file.add_line("/** Initializes all values of the message, and subsequent sub-messages to 0 */".to_string());
+    output_file.add_line(format!(
+        "#define {0}_INIT ({1}_t) {{ {2}\\",
+        pascal_to_uppercase(&message_definition.name),
+        pascal_to_snake_case(&message_definition.name),
+        spaces(pre_newline_length - define_size)
+    ));
+
+    for i in 0..size_sorted_field_list.len() {
+        let field: &MessageField = &size_sorted_field_list[i];
+
+        let is_last: bool = i != size_sorted_field_list.len() - 1;
+        let static_length: usize;
+        let pre_equal: usize;
+        let pre_newline;
+
+        match c_standard.allows_designated_initializers() {
+            true => {
+                pre_equal = pre_equal_length - field.identifier.len();
+                static_length = 9;
+                pre_newline = pre_newline_length - pre_equal_length - field.c_initializer(c_standard)?.len() - static_length + (!is_last as usize);
+            },
+            false => {
+                pre_equal = 0;
+                static_length = 5;
+                pre_newline = pre_newline_length - field.c_initializer(c_standard)?.len() - static_length + (!is_last as usize)
+            }
+        };
+
+        let comma = match is_last {
+            true => ",",
+            false => ""
+        };
+
+        let initializer_string = match c_standard.allows_designated_initializers() {
+            true => format!(
+                "    .{0}{1} = {2}{3} {4}\\",
+                field.identifier,
+                spaces(pre_equal),
+                field.c_initializer(c_standard)?,
+                comma,
+                spaces(pre_newline)
+            ),
+            false => format!("    {0}{1} {2}\\", field.c_initializer(c_standard)?, comma, spaces(pre_newline))
+        };
+
+        output_file.add_line(initializer_string);
+    }
+    output_file.add_line("}".to_string());
+    output_file.add_newline();
+
+    output_file.add_line("/** Describes the message and all its fields, as is passed to encoding and decoding functions to indicate how to parse the message */".to_string());
+    output_file.add_line(format!(
+        "#define {0}_DESCRIPTOR &{1}_descriptor",
+        pascal_to_uppercase(&message_definition.name),
+        pascal_to_snake_case(&message_definition.name)
+    ));
+    output_file.add_newline();
+
+    // Estimate encoded sizes
+    // ———————————————————————
+
+    let optimal_encoded_size: u64 = match message_definition.optimal_full_encoded_size() {
+        Err(error) => return Err(CompilerError::ParsingError(error)),
+        Ok(value) => value
+    };
+
+    let pessimal_encoded_size_option: Option<u64> = match message_definition.pessimal_encoded_size() {
+        Err(error) => return Err(CompilerError::ParsingError(error)),
+        Ok(value) => value
+    };
+
+    output_file.add_line("/** Most efficient encoded size of this message while retaining all data bytes. Rune encoders should generally aim for this as the maximum encoded size */".to_string());
+    output_file.add_line(format!("#define {0}_OPTIMAL_ENCODED_SIZE {1}", pascal_to_uppercase(&message_definition.name), optimal_encoded_size));
+    output_file.add_newline();
+    if let Some(pessimal_encoded_size) = pessimal_encoded_size_option {
+        output_file.add_line(
+            "/** Most inefficient encoded size possible for this message. This should be used to allocate buffers when for the decoder if the encoder implementation is not known */".to_string()
+        );
+        output_file.add_line(format!("#define {0}_PESSIMAL_ENCODED_SIZE {1}", pascal_to_uppercase(&message_definition.name), pessimal_encoded_size));
+        output_file.add_newline();
+    } else {
+        output_file.add_line(
+            "/** A skipped message field in here or in a sub-message means that a pessimal encoded case cannot be calculated. This is because the size of the of the skipped field cannot be known */"
+                .to_string()
+        );
+        output_file.add_newline();
+    }
+
+    Ok(())
+}
+
 fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations, struct_definition: &StructDefinition) -> Result<Vec<StructMember>, CompilerError> {
     let c_standard = &configurations.compiler_configurations.c_standard;
 
@@ -347,23 +551,10 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
 
     let struct_name: String = pascal_to_snake_case(&struct_definition.name);
 
-    header_file.add_line(format!("typedef struct RUNIC_STRUCT {0} {{", struct_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.struct_attributes, struct_name));
 
-    // Sorted list --> Then use sorted list instead of other one
-    let sorted_member_list: Vec<StructMember> = struct_definition.sort_members(&configurations.compiler_configurations)?;
-
-    // >>> Spacing of struct members does not look good, and will thus be dropped <<<
-
-    // Get type sizes for spacing reasons
-    // let mut longest_type: usize = 0;
-    //
-    // for member in &sorted_member_list {
-    //     if member.field_type.to_c_type().len() > longest_type {
-    //         longest_type = member.field_type.to_c_type().len();
-    //     }
-    // }
-
-    // >>> end <<<
+    // Sorted member list --> Then use sorted list instead of the one in the definition
+    let sorted_member_list: Vec<StructMember> = struct_definition.index_sort_members()?;
 
     let mut is_first: bool = true;
 
@@ -377,10 +568,9 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
             header_file.add_line(format!("    /**{0}*/", member.comment.as_ref().unwrap()));
         }
 
-        let member_name: String = pascal_to_snake_case(&member.identifier);
-        let spacing: usize = 0; // longest_type - sorted_member_list[i].field_type.to_c_type().len();
+        let spacing: usize = 0;
 
-        header_file.add_line(format!("    {0};", member.data_type.create_c_variable(&member_name, spacing, c_standard)?));
+        header_file.add_line(format!("    {0};", member.create_c_variable(spacing, c_standard)?));
 
         is_first = false;
     }
@@ -388,25 +578,22 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
     header_file.add_line(format!("}} {0}_t;", struct_name));
     header_file.add_newline();
 
-    header_file.add_line(format!("extern const rune_descriptor_t {0}_descriptor;", struct_name));
-    header_file.add_newline();
-
     Ok(sorted_member_list)
 }
 
-fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CConfigurations, struct_definition: &StructDefinition) -> Result<(), CompilerError> {
+fn output_struct_metadata(output_file: &mut OutputFile, configurations: &CConfigurations, struct_definition: &StructDefinition) -> Result<(), CompilerError> {
     let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
 
     let mut pre_equal_length: usize = 0;
 
-    let sorted_member_list: Vec<StructMember> = struct_definition.sort_members(&configurations.compiler_configurations)?;
+    let index_sorted_member_list: Vec<StructMember> = struct_definition.index_sort_members()?;
 
     // Calculate spacing for aligning the '=' sign
     // ————————————————————————————————————————————
 
-    for member in &sorted_member_list {
-        if member.identifier.len() > pre_equal_length {
-            pre_equal_length = member.identifier.len();
+    for field in &index_sorted_member_list {
+        if field.identifier.len() > pre_equal_length {
+            pre_equal_length = field.identifier.len();
         }
     }
 
@@ -419,13 +606,14 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
         pascal_to_snake_case(&struct_definition.name),
         spaces(0)
     );
+
     let mut pre_newline_length: usize = initializer_string.len();
 
     // Calculate spacing for after the newline
-    for i in 0..sorted_member_list.len() {
-        let member: &StructMember = &sorted_member_list[i];
+    for i in 0..index_sorted_member_list.len() {
+        let member: &StructMember = &index_sorted_member_list[i];
 
-        let is_last: bool = i != sorted_member_list.len() - 1;
+        let is_last: bool = i != index_sorted_member_list.len() - 1;
 
         let pre_equal: usize = pre_equal_length - member.identifier.len();
 
@@ -435,15 +623,8 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
         };
 
         let string: String = match c_standard.allows_designated_initializers() {
-            true => format!(
-                "    .{0}{1} = {2}{3} {4}\\",
-                member.identifier,
-                spaces(pre_equal),
-                member.data_type.c_initializer(c_standard)?,
-                comma,
-                ""
-            ),
-            false => format!("    {0}{1} {2}\\", member.data_type.c_initializer(c_standard)?, comma, "")
+            true => format!("    .{0}{1} = {2}{3} {4}\\", member.identifier, spaces(pre_equal), member.c_initializer(c_standard)?, comma, ""),
+            false => format!("    {0}{1} {2}\\", member.c_initializer(c_standard)?, comma, "")
         };
 
         // I don't know why the -2 is needed, but it does not work without it
@@ -455,6 +636,7 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
     // 20 seems to be the number of fixed characters on the define string
     let define_size: usize = 20 + pascal_to_uppercase(&struct_definition.name).len() + pascal_to_snake_case(&struct_definition.name).len();
 
+    output_file.add_line("/** Initializes all values of the message, and subsequent sub-messages to 0 */".to_string());
     output_file.add_line(format!(
         "#define {0}_INIT ({1}_t) {{ {2}\\",
         pascal_to_uppercase(&struct_definition.name),
@@ -462,10 +644,10 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
         spaces(pre_newline_length - define_size)
     ));
 
-    for i in 0..sorted_member_list.len() {
-        let member: &StructMember = &sorted_member_list[i];
+    for i in 0..index_sorted_member_list.len() {
+        let member: &StructMember = &index_sorted_member_list[i];
 
-        let is_last: bool = i != sorted_member_list.len() - 1;
+        let is_last: bool = i != index_sorted_member_list.len() - 1;
         let static_length: usize;
         let pre_equal: usize;
         let pre_newline;
@@ -474,12 +656,12 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
             true => {
                 pre_equal = pre_equal_length - member.identifier.len();
                 static_length = 9;
-                pre_newline = pre_newline_length - pre_equal_length - member.data_type.c_initializer(c_standard)?.len() - static_length + (!is_last as usize);
+                pre_newline = pre_newline_length - pre_equal_length - member.c_initializer(c_standard)?.len() - static_length + (!is_last as usize);
             },
             false => {
                 pre_equal = 0;
                 static_length = 5;
-                pre_newline = pre_newline_length - member.data_type.c_initializer(c_standard)?.len() - static_length + (!is_last as usize)
+                pre_newline = pre_newline_length - member.c_initializer(c_standard)?.len() - static_length + (!is_last as usize)
             }
         };
 
@@ -493,23 +675,16 @@ fn output_struct_initializer(output_file: &mut OutputFile, configurations: &CCon
                 "    .{0}{1} = {2}{3} {4}\\",
                 member.identifier,
                 spaces(pre_equal),
-                member.data_type.c_initializer(c_standard)?,
+                member.c_initializer(c_standard)?,
                 comma,
                 spaces(pre_newline)
             ),
-            false => format!("    {0}{1} {2}\\", member.data_type.c_initializer(c_standard)?, comma, spaces(pre_newline))
+            false => format!("    {0}{1} {2}\\", member.c_initializer(c_standard)?, comma, spaces(pre_newline))
         };
 
         output_file.add_line(initializer_string);
     }
     output_file.add_line("}".to_string());
-    output_file.add_newline();
-
-    output_file.add_line(format!(
-        "#define {0}_DESCRIPTOR &{1}_descriptor",
-        pascal_to_uppercase(&struct_definition.name),
-        pascal_to_snake_case(&struct_definition.name)
-    ));
     output_file.add_newline();
 
     Ok(())
@@ -533,6 +708,8 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // <stdint.h>
     //
     // —————————————————————————————————————————————————
+
+    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
 
     let h_file_string: String = format!(
         "{0}{1}.rune.h",
@@ -565,10 +742,20 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // File inclusions
     // ————————————————
 
-    // Standard library
-    header_file.add_line("#include <stdbool.h>".to_string());
-    header_file.add_line("#include <stdint.h>".to_string());
-    header_file.add_newline();
+    // Standard library bool (if standard allows it)
+    if c_standard.allows_boolean() {
+        header_file.add_line("#include <stdbool.h>".to_string());
+    }
+
+    // Standard library integers (if standard allows it)
+    if c_standard.allows_integer_types() {
+        header_file.add_line("#include <stdint.h>".to_string());
+    }
+
+    // If either type was allowed, then add a newline
+    if c_standard.allows_boolean() || c_standard.allows_integer_types() {
+        header_file.add_newline();
+    }
 
     // Include Runic Definitions
     header_file.add_line("#include \"rune.h\"".to_string());
@@ -612,12 +799,25 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // Structs
     // ————————
 
+    // TO-DO: Implement!!!
+
     // Print out structs
     for struct_definition in &file.definitions.structs {
         output_struct(&mut header_file, configurations, struct_definition)?;
 
-        // Add struct initializer
-        output_struct_initializer(&mut header_file, configurations, struct_definition)?
+        // Add struct metadata (initializer, descriptor, encoded sizes)
+        output_struct_metadata(&mut header_file, configurations, struct_definition)?
+    }
+
+    // Messages
+    // —————————
+
+    // Print out messages
+    for message_definition in &file.definitions.messages {
+        output_message(&mut header_file, configurations, message_definition)?;
+
+        // Add struct metadata (initializer, descriptor, encoded sizes)
+        output_message_metadata(&mut header_file, configurations, message_definition)?
     }
 
     // End & C++ guards
