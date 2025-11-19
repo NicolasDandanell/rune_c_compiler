@@ -709,6 +709,8 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     //
     // —————————————————————————————————————————————————
 
+    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
+
     let h_file_string: String = format!(
         "{0}{1}.rune.h",
         match file.relative_path.is_empty() {
@@ -740,10 +742,20 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // File inclusions
     // ————————————————
 
-    // Standard library
-    header_file.add_line("#include <stdbool.h>".to_string());
-    header_file.add_line("#include <stdint.h>".to_string());
-    header_file.add_newline();
+    // Standard library bool (if standard allows it)
+    if c_standard.allows_boolean() {
+        header_file.add_line("#include <stdbool.h>".to_string());
+    }
+
+    // Standard library integers (if standard allows it)
+    if c_standard.allows_integer_types() {
+        header_file.add_line("#include <stdint.h>".to_string());
+    }
+
+    // If either type was allowed, then add a newline
+    if c_standard.allows_boolean() || c_standard.allows_integer_types() {
+        header_file.add_newline();
+    }
 
     // Include Runic Definitions
     header_file.add_line("#include \"rune.h\"".to_string());
