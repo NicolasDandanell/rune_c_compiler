@@ -2,8 +2,7 @@
 // Declare first because of macros
 mod output;
 
-mod architecture;
-mod c_standard;
+mod c_configuration;
 mod c_utilities;
 mod compile_error;
 mod header;
@@ -17,9 +16,7 @@ use clap::Parser;
 use rune_parser::{RuneFileDescription, parser_rune_files};
 
 use crate::{
-    architecture::Architecture,
-    c_standard::CStandard,
-    c_utilities::{CConfigurations, CompileConfigurations},
+    c_configuration::{Architecture, CConfigurations, CStandard, CompileConfigurations},
     compile_error::CompilerError,
     header::output_header,
     output::*,

@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use rune_parser::types::{FieldIndex, FieldType, StructMember, UserDefinitionLink};
+use rune_parser::types::{FieldIndex, FieldType, MessageField, UserDefinitionLink};
 
 use crate::{
     RuneFileDescription,
-    c_utilities::{CConfigurations, CStructMember, pascal_to_snake_case, spaces},
+    c_configuration::CConfigurations,
+    c_utilities::{CMessageDefinition, CMessageField, pascal_to_snake_case, spaces},
     compile_error::CompilerError,
     output_file::OutputFile
 };
@@ -39,77 +40,48 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
     source_file.add_line("#include \"rune.h\"".to_string());
 
-    if !&file.definitions.structs.is_empty() {
+    if !&file.definitions.messages.is_empty() {
         source_file.add_newline();
     }
 
-    // Struct parsers
-    // ———————————————
+    // Message parsers
+    // ————————————————
 
-    for struct_definition in &file.definitions.structs {
-        let struct_name: String = pascal_to_snake_case(&struct_definition.name);
+    for message_definition in &file.definitions.messages {
+        let message_name: String = pascal_to_snake_case(&message_definition.name);
 
         // SORT BY INDEX; DO NOT FORGET
         // INDEXES MISSING MUST HAVE AN EMPTY DEFINITION --> .size = 0 will cause the field to be skipped
 
-        // Get highest index number (except verification field)
-        let mut highest_index: u64 = 0;
-        let mut has_verification: bool = false;
+        // Index sort all fields, adding empty definitions for skipped fields
+        let index_sorted_fields: Vec<MessageField> = message_definition.index_sort_fields()?;
+        let field_count: u64 = index_sorted_fields.len() as u64;
 
-        for member in &struct_definition.members {
-            let index: u64 = match member.index {
-                FieldIndex::Verifier => {
-                    has_verification = true;
-                    0
-                },
-                FieldIndex::Numeric(value) => value
-            };
-
-            if index > highest_index {
-                highest_index = index;
-            }
-        }
-
-        let member_count: u64 = highest_index + 1;
-
-        // Index sort all members, adding empty definitions for skipped fields
-        let mut index_sorted_members: Vec<StructMember> = Vec::with_capacity(member_count as usize);
         let mut descriptor_list: Vec<String> = Vec::with_capacity(0x20);
         let mut descriptor_flags: u32 = 0;
 
-        // Also get longest member name for spacing reasons
-        let mut longest_member_name_size: usize = 0;
+        // Also get longest field name for spacing reasons
+        let mut longest_field_name_size: usize = 0;
 
-        for i in 0..member_count {
-            // Empty definition that will be used if index not found in struct list
-            let mut member: StructMember = StructMember::index_empty(i)?;
+        let has_verification: bool = match index_sorted_fields[0].index {
+            FieldIndex::Verifier => true,
+            FieldIndex::Numeric(_) => false
+        };
 
-            // Try to find member with index i
-            for listed_member in &struct_definition.members {
-                let listed_index: u64 = match listed_member.index {
-                    FieldIndex::Numeric(index) => index,
-                    FieldIndex::Verifier => 0
-                };
-
-                if listed_index == i {
-                    member = listed_member.clone();
-
-                    // Check to see if it's a nested message, and add descriptor if so
-                    if let UserDefinitionLink::StructLink(link) = &member.user_definition_link {
-                        descriptor_list.push(pascal_to_snake_case(&link.name));
-                        descriptor_flags += 1 << member.index.value();
-                    }
-                }
+        for field in &index_sorted_fields {
+            // Check to see if it's a nested message, and add descriptor if so
+            if let FieldType::UserDefined(_, UserDefinitionLink::MessageLink(link)) = &field.data_type {
+                descriptor_list.push(pascal_to_snake_case(&link.name));
+                descriptor_flags += 1 << field.index.value();
             }
 
-            let not_empty: bool = member.data_type != FieldType::Empty;
+            // Check if field is empty, as empty fields will not have a '.' in front of the name
+            let not_empty: bool = field.data_type != FieldType::Empty;
 
-            // Check name length for spacing (Done here to include "(empty)" members)
-            if pascal_to_snake_case(&member.identifier).len() + not_empty as usize > longest_member_name_size {
-                longest_member_name_size = pascal_to_snake_case(&member.identifier).len() + not_empty as usize;
+            // Check name length for spacing
+            if pascal_to_snake_case(&field.identifier).len() + not_empty as usize > longest_field_name_size {
+                longest_field_name_size = pascal_to_snake_case(&field.identifier).len() + not_empty as usize;
             }
-
-            index_sorted_members.push(member);
         }
 
         // Handle field descriptors
@@ -119,9 +91,9 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
         // Output field descriptors (if any)
         if !descriptor_list.is_empty() {
-            descriptor_list_initializer = format!("&{0}_field_descriptors", struct_name);
+            descriptor_list_initializer = format!("&{0}_field_descriptors", message_name);
 
-            source_file.add_line(format!("const rune_descriptor_t* {0}_field_descriptors[{1}] = {{", struct_name, descriptor_list.len()));
+            source_file.add_line(format!("const rune_descriptor_t* {0}_field_descriptors[{1}] = {{", message_name, descriptor_list.len()));
 
             for i in 0..descriptor_list.len() {
                 let comma: String = match i == descriptor_list.len() - 1 {
@@ -158,47 +130,47 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             }
         }
 
-        source_file.add_line(format!("const rune_descriptor_t RUNIC_PARSER {0}_descriptor = {{", struct_name));
+        source_file.add_line(format!("const rune_descriptor_t RUNIC_PARSER {0}_descriptor = {{", message_name));
         source_file.add_line(format!(
-            "    {0}.descriptor_flags     {1}={2} 0b{3:0members$b},",
+            "    {0}.descriptor_flags     {1}={2} 0b{3:0fields$b},",
             comment_start,
             space,
             comment_end,
             descriptor_flags,
-            members = member_count as usize
+            fields = field_count as usize
         ));
         source_file.add_line(format!("    {0}.field_descriptors    {1}={2} {3},", comment_start, space, comment_end, descriptor_list_initializer));
-        source_file.add_line(format!("    {0}.size                 {1}={2} sizeof({3}_t),", comment_start, space, comment_end, struct_name));
-        source_file.add_line(format!("    {0}.largest_field        {1}={2} {3},", comment_start, space, comment_end, highest_index));
+        source_file.add_line(format!("    {0}.size                 {1}={2} sizeof({3}_t),", comment_start, space, comment_end, message_name));
+        source_file.add_line(format!("    {0}.largest_field        {1}={2} {3},", comment_start, space, comment_end, field_count - 1));
         source_file.add_line(format!("    {0}.parsing_data         {1}={2} {{", comment_start, space, comment_end));
         source_file.add_line(format!("    {0}    .has_verification {1}={2} {3},", comment_start, space, comment_end, has_verification_string));
         source_file.add_line("    },".to_string());
         source_file.add_line(format!("    {0}.field_info           {1}={2} {{", comment_start, space, comment_end));
 
-        for (counter, member) in index_sorted_members.iter().enumerate() {
-            let member_name: String = pascal_to_snake_case(&member.identifier);
-            let spacing: usize = longest_member_name_size - member_name.len() - (member.data_type != FieldType::Empty) as usize;
+        for (counter, field) in index_sorted_fields.iter().enumerate() {
+            let field_name: String = pascal_to_snake_case(&field.identifier);
+            let spacing: usize = longest_field_name_size - field_name.len() - (field.data_type != FieldType::Empty) as usize;
 
-            let init_char: String = match &member.data_type {
+            let init_char: String = match &field.data_type {
                 FieldType::Empty => String::new(),
                 _ => String::from(".")
             };
 
-            let end: char = match counter == member_count as usize - 1 {
+            let end: char = match counter == field_count as usize - 1 {
                 false => ',',
                 true => ' '
             };
 
-            let size_string: String = member.c_size_definition(c_standard)?;
+            let size_string: String = field.c_size_definition(c_standard)?;
 
             let verification_string: String = match has_verification && counter == 0 {
                 false => String::from(""),
                 true => String::from("Verifier field - ")
             };
 
-            let offset_string: String = match &member.data_type {
+            let offset_string: String = match &field.data_type {
                 FieldType::Empty => String::from("0"),
-                _ => format!("offsetof({0}_t, {1})", struct_name, member_name)
+                _ => format!("offsetof({0}_t, {1})", message_name, field_name)
             };
 
             let comment_spacing = match c_standard.allows_designated_initializers() {
@@ -210,7 +182,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
                 "    /*  {0}{1}{2}: {3}{4}{5} */ {{",
                 comment_spacing,
                 init_char,
-                member_name,
+                field_name,
                 spaces(spacing),
                 verification_string,
                 counter
