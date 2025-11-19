@@ -84,7 +84,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     // ————————————————————
 
     header_file.add_line(String::from("#if defined __LITTLE_ENDIAN__"));
-    header_file.add_line(format!("typedef struct RUNIC_BITFIELD {0} {{", bitfield_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
 
     // Comment
     if bitfield_definition.comment.is_some() {
@@ -139,7 +139,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
     // —————————————————
 
     header_file.add_line(String::from("#elif defined __BIG_ENDIAN__"));
-    header_file.add_line(format!("typedef struct RUNIC_BITFIELD {0} {{", bitfield_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
 
     // Comment
     if bitfield_definition.comment.is_some() {
@@ -248,7 +248,8 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
     let mut needs_backing_value: bool = !allow_backing_type;
 
     header_file.add_line(format!(
-        "typedef enum RUNIC_ENUM {0}{1} {{",
+        "typedef enum {0}{1}{2} {{",
+        configurations.attributes.enum_attributes,
         enum_name,
         match allow_backing_type {
             false => String::from(""),
@@ -347,7 +348,7 @@ fn output_message(header_file: &mut OutputFile, configurations: &CConfigurations
 
     let message_name: String = pascal_to_snake_case(&struct_definition.name);
 
-    header_file.add_line(format!("typedef struct RUNIC_MESSAGE {0} {{", message_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.message_attributes, message_name));
 
     // Sorted field list --> Then use sorted list instead of the one in the definition
     let sorted_field_list: Vec<MessageField> = struct_definition.size_sort_fields(&configurations.compiler_configurations)?;
@@ -550,7 +551,7 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
 
     let struct_name: String = pascal_to_snake_case(&struct_definition.name);
 
-    header_file.add_line(format!("typedef struct RUNIC_STRUCT {0} {{", struct_name));
+    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.struct_attributes, struct_name));
 
     // Sorted member list --> Then use sorted list instead of the one in the definition
     let sorted_member_list: Vec<StructMember> = struct_definition.index_sort_members()?;

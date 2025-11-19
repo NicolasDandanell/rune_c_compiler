@@ -139,15 +139,27 @@ pub struct CompileConfigurations {
     pub c_standard: CStandard
 }
 
+pub struct AttributeStrings {
+    pub bitfield_attributes:   String,
+    pub enum_attributes:       String,
+    pub message_attributes:    String,
+    pub metadata_attributes:   String,
+    pub descriptor_attributes: String,
+    pub struct_attributes:     String
+}
+
 pub struct CConfigurations {
     // Configurations
     pub compiler_configurations: CompileConfigurations,
 
     // Data definitions
-    pub field_size_type_size:   usize,
-    pub field_offset_type_size: usize,
-    pub message_size_type_size: usize,
-    pub parser_index_type_size: usize,
+    pub field_size_type_size:       usize,
+    pub field_offset_type_size:     usize,
+    pub message_size_type_size:     usize,
+    pub descriptor_index_type_size: usize,
+
+    // Type attribute strings
+    pub attributes: AttributeStrings,
 
     // Largest encountered declared message index
     pub largest_message_index: usize
@@ -180,7 +192,7 @@ impl CConfigurations {
         }
 
         // Get the unsigned integer size needed to describe the number of messages
-        let parser_index_type_size: usize = match amount_of_messages {
+        let descriptor_index_type_size: usize = match amount_of_messages {
             0x00000000..=0x000000FF => 1,
             0x00000100..=0x0000FFFF => 2,
             0x00010000..=0xFFFFFFFF => 4,
@@ -204,13 +216,121 @@ impl CConfigurations {
         let field_size_type_size: usize = message_size_type_size;
         let field_offset_type_size: usize = message_size_type_size;
 
+        // Parse attribute strings
+        // ————————————————————————
+
+        let attributes = parse_attributes(configurations);
+
         Ok(CConfigurations {
             compiler_configurations: configurations.clone(),
             field_size_type_size,
             field_offset_type_size,
             message_size_type_size,
-            parser_index_type_size,
+            descriptor_index_type_size,
+            attributes,
             largest_message_index
         })
+    }
+}
+
+fn parse_attributes(configurations: &CompileConfigurations) -> AttributeStrings {
+    let mut bitfield_attribute_list: String = String::with_capacity(0x100);
+    let enum_attribute_list: String = String::with_capacity(0x100);
+    let mut message_attribute_list: String = String::with_capacity(0x100);
+    let mut metadata_attribute_list: String = String::with_capacity(0x100);
+    let mut descriptor_attribute_list: String = String::with_capacity(0x100);
+    let mut struct_attribute_list: String = String::with_capacity(0x100);
+
+    // Parse "packed" attribute
+    // —————————————————————————
+
+    // Bitfields are always packed!
+    match bitfield_attribute_list.is_empty() {
+        true => bitfield_attribute_list.push_str("packed"),
+        false => bitfield_attribute_list.push_str(", packed")
+    }
+
+    // Structs are always packed!
+    match struct_attribute_list.is_empty() {
+        true => struct_attribute_list.push_str("packed"),
+        false => struct_attribute_list.push_str(", packed")
+    }
+
+    // Enums have backing types, and do not need to be packed
+
+    if configurations.pack_data {
+        // Parser
+        match descriptor_attribute_list.is_empty() {
+            true => descriptor_attribute_list.push_str("packed"),
+            false => descriptor_attribute_list.push_str(", packed")
+        }
+
+        // Messages
+        match message_attribute_list.is_empty() {
+            true => message_attribute_list.push_str("packed"),
+            false => message_attribute_list.push_str(", packed")
+        }
+    }
+
+    if configurations.pack_metadata {
+        match metadata_attribute_list.is_empty() {
+            true => metadata_attribute_list.push_str("packed"),
+            false => metadata_attribute_list.push_str(", packed")
+        }
+    }
+
+    // Parse "section" attribute
+    // ——————————————————————————
+
+    if configurations.section.is_some() {
+        let section_name: String = configurations.section.clone().unwrap();
+
+        // Descriptor
+        match descriptor_attribute_list.is_empty() {
+            true => descriptor_attribute_list.push_str(format!("section(\"{0}\")", section_name).as_str()),
+            false => descriptor_attribute_list.push_str(format!(", section(\"{0}\")", section_name).as_str())
+        }
+    }
+
+    // Create attribute strings
+    // —————————————————————————
+
+    // Runic bitfields must ALWAYS be packed, so this will never be empty
+    let bitfield_attributes: String = format!("__attribute__(({0})) ", bitfield_attribute_list);
+
+    // Enums
+    let enum_attributes: String = match enum_attribute_list.is_empty() {
+        true => String::new(),
+        false => format!("__attribute__(({0})) ", enum_attribute_list)
+    };
+
+    // Messages
+    let message_attributes: String = match message_attribute_list.is_empty() {
+        true => String::new(),
+        false => format!("__attribute__(({0})) ", message_attribute_list)
+    };
+
+    // Descriptor
+    let descriptor_attributes: String = match descriptor_attribute_list.is_empty() {
+        true => String::new(),
+        false => format!("__attribute__(({0})) ", descriptor_attribute_list)
+    };
+
+    // Structs
+    let struct_attributes: String = format!("__attribute__(({0})) ", struct_attribute_list);
+
+    // Metadata
+    let metadata_attributes: String = match metadata_attribute_list.is_empty() {
+        true => String::new(),
+        false => format!("__attribute__(({0})) ", metadata_attribute_list)
+    };
+
+    AttributeStrings {
+        bitfield_attributes,
+        enum_attributes,
+        message_attributes,
+        metadata_attributes,
+        descriptor_attributes,
+        struct_attributes
     }
 }

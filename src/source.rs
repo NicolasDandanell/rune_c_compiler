@@ -130,7 +130,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
             }
         }
 
-        source_file.add_line(format!("const rune_descriptor_t RUNIC_PARSER {0}_descriptor = {{", message_name));
+        source_file.add_line(format!("const rune_descriptor_t {0}{1}_descriptor = {{", configurations.attributes.descriptor_attributes, message_name));
         source_file.add_line(format!(
             "    {0}.descriptor_flags     {1}={2} 0b{3:0fields$b},",
             comment_start,

@@ -29,101 +29,6 @@ fn type_from_size(size: usize, c_standard: &CStandard) -> Result<String, Compile
 pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
     let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
 
-    let mut bitfield_attributes: String = String::with_capacity(0x100);
-    let enum_attributes: String = String::with_capacity(0x100);
-    let mut message_attributes: String = String::with_capacity(0x100);
-    let mut parser_attributes: String = String::with_capacity(0x100);
-    let mut struct_attributes: String = String::with_capacity(0x100);
-
-    let mut metadata_attributes: String = String::with_capacity(0x100);
-
-    // Parse "packed" attribute
-    // —————————————————————————
-
-    // Bitfields are always packed!
-    match bitfield_attributes.is_empty() {
-        true => bitfield_attributes.push_str("packed"),
-        false => bitfield_attributes.push_str(", packed")
-    }
-
-    // Structs are always packed!
-    match struct_attributes.is_empty() {
-        true => struct_attributes.push_str("packed"),
-        false => struct_attributes.push_str(", packed")
-    }
-
-    // Enums have backing types, and do not need to be packed
-
-    if configurations.compiler_configurations.pack_data {
-        // Parser
-        match parser_attributes.is_empty() {
-            true => parser_attributes.push_str("packed"),
-            false => parser_attributes.push_str(", packed")
-        }
-
-        // Messages
-        match message_attributes.is_empty() {
-            true => message_attributes.push_str("packed"),
-            false => message_attributes.push_str(", packed")
-        }
-    }
-
-    if configurations.compiler_configurations.pack_metadata {
-        match metadata_attributes.is_empty() {
-            true => metadata_attributes.push_str("packed"),
-            false => metadata_attributes.push_str(", packed")
-        }
-    }
-
-    // Parse "section" attribute
-    // ——————————————————————————
-
-    if configurations.compiler_configurations.section.is_some() {
-        let section_name: String = configurations.compiler_configurations.section.clone().unwrap();
-
-        // Parser
-        match parser_attributes.is_empty() {
-            true => parser_attributes.push_str(format!("section(\"{0}\")", section_name).as_str()),
-            false => parser_attributes.push_str(format!(", section(\"{0}\")", section_name).as_str())
-        }
-    }
-
-    // Create attribute strings
-    // —————————————————————————
-
-    // Runic bitfields must ALWAYS be packed, so this will never be empty
-    let runic_bitfield_string: String = format!("__attribute__(({0}))", bitfield_attributes);
-
-    // Enums
-    let runic_enum_string: String = match enum_attributes.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0}))", enum_attributes)
-    };
-
-    // Messages
-    let runic_message_string: String = match message_attributes.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0}))", message_attributes)
-    };
-
-    // Parser
-    let runic_parser_string: String = match parser_attributes.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0}))", parser_attributes)
-    };
-
-    // Structs
-    let runic_struct_string: String = match struct_attributes.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0}))", struct_attributes)
-    };
-
-    // Metadata
-    let runic_metadata_string: String = match metadata_attributes.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0}))", metadata_attributes)
-    };
-
     // Create a list with all declared messages across all files
     let mut message_definitions: Vec<MessageDefinition> = Vec::with_capacity(0x40);
 
@@ -160,12 +65,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line("/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define RUNIC_BITFIELD {0}", runic_bitfield_string));
-    definitions_file.add_line(format!("#define RUNIC_ENUM     {0}", runic_enum_string));
-    definitions_file.add_line(format!("#define RUNIC_MESSAGE  {0}", runic_message_string));
-    definitions_file.add_line(format!("#define RUNIC_METADATA {0}", runic_metadata_string));
-    definitions_file.add_line(format!("#define RUNIC_PARSER   {0}", runic_parser_string));
-    definitions_file.add_line(format!("#define RUNIC_STRUCT   {0}", runic_struct_string));
+    definitions_file.add_line(format!("#define RUNIC_METADATA {0}", configurations.attributes.metadata_attributes));
     definitions_file.add_newline();
 
     definitions_file.add_line("// Message dependent definitions".to_string());
@@ -199,7 +99,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_line(format!(
         "#define RUNE_PARSER_INDEX_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
-            true => type_from_size(configurations.parser_index_type_size, c_standard)?,
+            true => type_from_size(configurations.descriptor_index_type_size, c_standard)?,
             false => String::from("size_t")
         }
     ));
