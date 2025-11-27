@@ -76,12 +76,13 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     definitions_file.add_newline();
 
     definitions_file.add_line(format!(
-        "#define RUNE_FIELD_SIZE_TYPE   {0}",
-        match configurations.compiler_configurations.pack_metadata {
-            true => type_from_size(configurations.field_size_type_size, c_standard)?,
-            false => String::from("size_t")
+        "#define RUNE_FIELD_INFO_COUNT {0}",
+        match c_standard.allows_flexible_array_members() {
+            true => String::new(),
+            false => (configurations.largest_message_index + 1).to_string()
         }
     ));
+
     definitions_file.add_line(format!(
         "#define RUNE_FIELD_OFFSET_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
@@ -89,6 +90,15 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
             false => String::from("size_t")
         }
     ));
+
+    definitions_file.add_line(format!(
+        "#define RUNE_FIELD_SIZE_TYPE   {0}",
+        match configurations.compiler_configurations.pack_metadata {
+            true => type_from_size(configurations.field_size_type_size, c_standard)?,
+            false => String::from("size_t")
+        }
+    ));
+
     definitions_file.add_line(format!(
         "#define RUNE_MESSAGE_SIZE_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
@@ -96,6 +106,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
             false => String::from("size_t")
         }
     ));
+
     definitions_file.add_line(format!(
         "#define RUNE_PARSER_INDEX_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
@@ -103,13 +114,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
             false => String::from("size_t")
         }
     ));
-    definitions_file.add_line(format!(
-        "#define RUNE_FIELD_INFO_COUNT {0}",
-        match c_standard.allows_flexible_array_members() {
-            true => String::new(),
-            false => (configurations.largest_message_index + 1).to_string()
-        }
-    ));
+
     definitions_file.add_newline();
 
     definitions_file.add_line("#endif // RUNIC_DEFINITIONS_H".to_string());

@@ -91,7 +91,7 @@ pub fn output_source(file: &RuneFileDescription, configurations: &CConfiguration
 
         // Output field descriptors (if any)
         if !descriptor_list.is_empty() {
-            descriptor_list_initializer = format!("&{0}_field_descriptors", message_name);
+            descriptor_list_initializer = format!("{0}_field_descriptors", message_name);
 
             source_file.add_line(format!("const rune_descriptor_t* {0}_field_descriptors[{1}] = {{", message_name, descriptor_list.len()));
 
