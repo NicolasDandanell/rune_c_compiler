@@ -58,6 +58,7 @@ pub trait CNumericValue {
 impl CNumericValue for NumericLiteral {
     fn requires_size(&self) -> u64 {
         let leading_zeroes = match self {
+            NumericLiteral::AsciiChar(_) => 1,
             NumericLiteral::Boolean(_) => return 1,
             NumericLiteral::PositiveInteger(value, _) => value.leading_zeros() / 8,
             NumericLiteral::NegativeInteger(value, _) => value.leading_zeros() / 8,

@@ -283,6 +283,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
         let member_name: String = pascal_to_uppercase(&enum_member.identifier);
 
         let is_zero: bool = match enum_member.value {
+            NumericLiteral::AsciiChar(value) => value as u8 == 0,
             NumericLiteral::Boolean(value) => !value,
             NumericLiteral::PositiveInteger(value, _) => value == 0,
             NumericLiteral::NegativeInteger(value, _) => value == 0,
