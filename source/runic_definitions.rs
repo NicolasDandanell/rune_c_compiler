@@ -54,28 +54,28 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
     // Definitions
     // ————————————
 
-    definitions_file.add_line("#ifndef RUNE_DEFINITIONS_H".to_string());
-    definitions_file.add_line("#define RUNE_DEFINITIONS_H".to_string());
+    definitions_file.add_line(&"#ifndef RUNE_DEFINITIONS_H".to_string());
+    definitions_file.add_line(&"#define RUNE_DEFINITIONS_H".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line("// Configuration dependent definitions".to_string());
-    definitions_file.add_line("// ————————————————————————————————————".to_string());
+    definitions_file.add_line(&"// Configuration dependent definitions".to_string());
+    definitions_file.add_line(&"// ————————————————————————————————————".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line("/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */".to_string());
+    definitions_file.add_line(&"/* These definitions are based on the configurations passed by user to get code generator, such as packing, specific data sections, or other */".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!("#define RUNIC_METADATA {0}", configurations.attributes.metadata_attributes));
+    definitions_file.add_line(&format!("#define RUNIC_METADATA {0}", configurations.attributes.metadata_attributes));
     definitions_file.add_newline();
 
-    definitions_file.add_line("// Message dependent definitions".to_string());
-    definitions_file.add_line("// ——————————————————————————————".to_string());
+    definitions_file.add_line(&"// Message dependent definitions".to_string());
+    definitions_file.add_line(&"// ——————————————————————————————".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line("/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */".to_string());
+    definitions_file.add_line(&"/* These definitions are dependent on the declared data, and will vary to adapt to accommodate the sizes of the declared data structures */".to_string());
     definitions_file.add_newline();
 
-    definitions_file.add_line(format!(
+    definitions_file.add_line(&format!(
         "#define RUNE_FIELD_INFO_COUNT {0}",
         match c_standard.allows_flexible_array_members() {
             true => String::new(),
@@ -83,7 +83,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
         }
     ));
 
-    definitions_file.add_line(format!(
+    definitions_file.add_line(&format!(
         "#define RUNE_FIELD_OFFSET_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
             true => type_from_size(configurations.field_offset_type_size, c_standard)?,
@@ -91,7 +91,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
         }
     ));
 
-    definitions_file.add_line(format!(
+    definitions_file.add_line(&format!(
         "#define RUNE_FIELD_SIZE_TYPE   {0}",
         match configurations.compiler_configurations.pack_metadata {
             true => type_from_size(configurations.field_size_type_size, c_standard)?,
@@ -99,7 +99,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
         }
     ));
 
-    definitions_file.add_line(format!(
+    definitions_file.add_line(&format!(
         "#define RUNE_MESSAGE_SIZE_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
             true => type_from_size(configurations.message_size_type_size, c_standard)?,
@@ -107,7 +107,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
         }
     ));
 
-    definitions_file.add_line(format!(
+    definitions_file.add_line(&format!(
         "#define RUNE_PARSER_INDEX_TYPE {0}",
         match configurations.compiler_configurations.pack_metadata {
             true => type_from_size(configurations.descriptor_index_type_size, c_standard)?,
@@ -117,7 +117,7 @@ pub fn output_runic_definitions(file_descriptions: &Vec<RuneFileDescription>, co
 
     definitions_file.add_newline();
 
-    definitions_file.add_line("#endif // RUNIC_DEFINITIONS_H".to_string());
+    definitions_file.add_line(&"#endif // RUNIC_DEFINITIONS_H".to_string());
 
     definitions_file.output_file()
 }

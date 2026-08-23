@@ -8,7 +8,7 @@ use rune_parser::{
 use crate::{
     RuneFileDescription,
     c_configuration::{CConfigurations, CStandard},
-    c_utilities::{CMessageDefinition, CMessageField, CNumericValue, CPrimitive, CStructDefinition, CStructMember, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    c_utilities::{CMessageDefinition, CMessageField, CNumericValue, CPrimitive, CStructDefinition, CStructMember, documentation_comment, pascal_to_snake_case, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile
@@ -16,11 +16,12 @@ use crate::{
 
 /// Outputs a bitfield definition into the header file
 fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfigurations, bitfield_definition: &BitfieldDefinition) -> Result<(), CompilerError> {
-    let c_standard = &configurations.compiler_configurations.c_standard;
+    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
+    let strict: bool           = configurations.compiler_configurations.strict;
 
     // Print comment if present
     if let Some(comment) = &bitfield_definition.comment {
-        header_file.add_line(format!("/**{0}*/", comment))
+        header_file.add_line(&documentation_comment(comment, 0))
     }
 
     let bitfield_name: String = pascal_to_snake_case(&bitfield_definition.name);
@@ -75,21 +76,13 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
         }
     }
 
-    // Disclaimer
-    // ———————————
-
-    header_file.add_line(String::from("// Disclaimer ! Run rune_bitfield_tester() function to check whether bitfields are behaving as intended"));
+    // Start bitfield definition
+    header_file.add_line(&format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
 
     // Little endian order
     // ————————————————————
 
-    header_file.add_line(String::from("#if defined __LITTLE_ENDIAN__"));
-    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
-
-    // Comment
-    if bitfield_definition.comment.is_some() {
-        header_file.add_line(format!("/**{0}*/", bitfield_definition.comment.as_ref().unwrap()));
-    }
+    header_file.add_line(&format!("#if {0}", c_standard.little_endian_check(strict)?));
 
     // Get little endian order
     for i in 0..bitfield_definition.members.len() as u64 {
@@ -110,7 +103,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
             if member.0 != 0 {
                 header_file.add_newline();
             }
-            header_file.add_line(format!("    /**{0}*/", member.1.comment.as_ref().unwrap()));
+            header_file.add_line(&documentation_comment(member.1.comment.as_ref().unwrap(), 4));
         }
 
         let member_name = pascal_to_snake_case(&member.1.identifier);
@@ -130,21 +123,13 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
             }
         };
 
-        header_file.add_line(format!("    {0} {1}{2} : {3};", backing_string, member_name, spaces(longest_name - member_name.len()), bit_size));
+        header_file.add_line(&format!("    {0} {1}{2} : {3};", backing_string, member_name, spaces(longest_name - member_name.len()), bit_size));
     }
-
-    header_file.add_line(format!("}} {0}_t;", bitfield_name));
 
     // Big endian order
     // —————————————————
 
-    header_file.add_line(String::from("#elif defined __BIG_ENDIAN__"));
-    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.bitfield_attributes, bitfield_name));
-
-    // Comment
-    if bitfield_definition.comment.is_some() {
-        header_file.add_line(format!("/**{0}*/", bitfield_definition.comment.as_ref().unwrap()));
-    }
+    header_file.add_line(&format!("#elif {0}", c_standard.big_endian_check(strict)?));
 
     // Add padding - In the beginning for little endian
     big_endian_order.push(padding.clone());
@@ -166,7 +151,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
             if member.0 != 0 {
                 header_file.add_newline();
             }
-            header_file.add_line(format!("    /**{0}*/", member.1.comment.as_ref().unwrap()));
+            header_file.add_line(&documentation_comment(member.1.comment.as_ref().unwrap(), 4));
         }
 
         let member_name: String = pascal_to_snake_case(&member.1.identifier);
@@ -186,23 +171,46 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
             }
         };
 
-        header_file.add_line(format!("    {0} {1}{2} : {3};", backing_string, member_name, spaces(longest_name - member_name.len()), bit_size));
+        header_file.add_line(&format!("    {0} {1}{2} : {3};", backing_string, member_name, spaces(longest_name - member_name.len()), bit_size));
     }
-
-    header_file.add_line(format!("}} {0}_t;", bitfield_name));
 
     // Error
     // ——————
 
-    header_file.add_line(String::from("#else"));
-    header_file.add_line(String::from("#error \"Only little and big endianness is supported by this Rune C implementation\""));
-    header_file.add_line(String::from("#endif // __BYTE_ORDER__"));
+    header_file.add_line(&String::from("#else"));
+    header_file.add_line(&String::from("#error \"Only little and big endianness is supported by this Rune C implementation\""));
+    header_file.add_line(&String::from("#endif"));
+
+    // End bitfield definition
+    header_file.add_line(&format!("}} {0}_t;", bitfield_name));
     header_file.add_newline();
+
+    // Static Assertions
+    // ——————————————————
+
+    // Special compile time warning if declaring a 64 bit bitfield in a 32 bit platform
+    if (bitfield_definition.backing_type == Primitive::I64) || (bitfield_definition.backing_type == Primitive::U64) {
+        // If size of (void*) == 4. This should work as bitfields require at least C11, and UINTPTR_MAX and UINT32_MAX were introduced in C99
+        header_file.add_line(&String::from("#if UINTPTR_MAX == UINT32_MAX"));
+        header_file.add_line(&String::from("#warning \"Compiling a 64 bit bitfield in a 32 bit platform! Rune cannot guarantee the bitfield will compile as intended\""));
+        header_file.add_line(&String::from("#endif"));
+    }
+
+    // Assert overall expected struct size
+    header_file.add_line(&documentation_comment(&"Size check to verify bitfield structure", 0));
+    header_file.add_line(&format!("{0}(sizeof({1}_t) == {2}, \"{1}_t did not have the expected size of {2}!\");", &c_standard.static_assert()?, bitfield_name, bitfield_definition.backing_type.c_size()));
+    header_file.add_newline();
+
+    // Assert the position and width of every struct member
+    //  · Not possible sadly... Might not be needed though if full padding is present, as an overall size check would catch any issues
+
+    // static constexpr raw_value
+    // static const
 
     // Initializer
     // ————————————
 
-    header_file.add_line(format!("#define {0}_INIT 0", pascal_to_uppercase(&bitfield_definition.name)));
+    header_file.add_line(&format!("#define {0}_INIT {{ 0 }}", pascal_to_uppercase(&bitfield_definition.name)));
     header_file.add_newline();
 
     Ok(())
@@ -212,7 +220,7 @@ fn output_bitfield(header_file: &mut OutputFile, configurations: &CConfiguration
 fn output_define(header_file: &mut OutputFile, define: &DefineDefinition) {
     // Print comment if present
     if let Some(comment) = &define.comment {
-        header_file.add_line(format!("/**{0}*/", comment))
+        header_file.add_line(&documentation_comment(comment, 0))
     }
 
     let define_name: String = define.name.clone();
@@ -230,7 +238,7 @@ fn output_define(header_file: &mut OutputFile, define: &DefineDefinition) {
         }
     };
 
-    header_file.add_line(format!("#define {0} {1}", define_name, define_value));
+    header_file.add_line(&format!("#define {0} {1}", define_name, define_value));
 }
 
 /// Outputs an enum into the header file
@@ -239,7 +247,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
 
     // Print comment if present
     if let Some(comment) = &enum_definition.comment {
-        header_file.add_line(format!("/**{0}*/", comment))
+        header_file.add_line(&documentation_comment(comment, 0))
     }
 
     let enum_name: String = pascal_to_snake_case(&enum_definition.name);
@@ -247,7 +255,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
     let allow_backing_type: bool = configurations.compiler_configurations.c_standard.allows_enum_backing_type();
     let mut needs_backing_value: bool = !allow_backing_type;
 
-    header_file.add_line(format!(
+    header_file.add_line(&format!(
         "typedef enum {0}{1}{2} {{",
         configurations.attributes.enum_attributes,
         enum_name,
@@ -277,7 +285,7 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
             if i != 0 {
                 header_file.add_newline();
             }
-            header_file.add_line(format!("    /**{0}*/", enum_member.comment.as_ref().unwrap()));
+            header_file.add_line(&documentation_comment(enum_member.comment.as_ref().unwrap(), 4));
         }
 
         let member_name: String = pascal_to_uppercase(&enum_member.identifier);
@@ -304,16 +312,13 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
             true => String::from("")
         };
 
-        header_file.add_line(format!("    {0}{1} = {2}{3}", member_name, spaces(longest_member_name - member_name.len()), enum_member.value, ending));
+        header_file.add_line(&format!("    {0}{1} = {2}{3}", member_name, spaces(longest_member_name - member_name.len()), enum_member.value, ending));
     }
 
     if needs_backing_value {
         header_file.add_newline();
-        header_file.add_line(format!(
-            "    /** Value to coerce enum to minimum size of declared backing type {0} */",
-            enum_definition.backing_type.to_c_type(c_standard)?
-        ));
-        header_file.add_line(format!(
+        header_file.add_line(&documentation_comment(&format!("Value to coerce enum to minimum size of declared backing type {0}", enum_definition.backing_type.to_c_type(c_standard)?), 4));
+        header_file.add_line(&format!(
             "    {0}_SIZE_RESERVE_VALUE = {1}",
             pascal_to_uppercase(&enum_definition.name),
             match enum_definition.backing_type.c_size() {
@@ -328,11 +333,11 @@ fn output_enum(header_file: &mut OutputFile, configurations: &CConfigurations, e
     }
 
     // Output enum definitions
-    header_file.add_line(format!("}} {0}_t;", enum_name));
+    header_file.add_line(&format!("}} {0}_t;", enum_name));
     header_file.add_newline();
 
     // Output enum initializer value
-    header_file.add_line(format!("#define {0}_INIT {1}", pascal_to_uppercase(&enum_name), initializer_value));
+    header_file.add_line(&format!("#define {0}_INIT {1}", pascal_to_uppercase(&enum_name), initializer_value));
     header_file.add_newline();
 
     Ok(())
@@ -344,12 +349,12 @@ fn output_message(header_file: &mut OutputFile, configurations: &CConfigurations
 
     // Print comment if present
     if let Some(comment) = &struct_definition.comment {
-        header_file.add_line(format!("/**{0}*/", comment))
+        header_file.add_line(&documentation_comment(comment, 0))
     }
 
     let message_name: String = pascal_to_snake_case(&struct_definition.name);
 
-    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.message_attributes, message_name));
+    header_file.add_line(&format!("typedef struct {0}{1} {{", configurations.attributes.message_attributes, message_name));
 
     // Sorted field list --> Then use sorted list instead of the one in the definition
     let sorted_field_list: Vec<MessageField> = struct_definition.size_sort_fields(&configurations.compiler_configurations)?;
@@ -376,20 +381,20 @@ fn output_message(header_file: &mut OutputFile, configurations: &CConfigurations
             if !is_first {
                 header_file.add_newline();
             }
-            header_file.add_line(format!("    /**{0}*/", field.comment.as_ref().unwrap()));
+            header_file.add_line(&documentation_comment(field.comment.as_ref().unwrap(), 4));
         }
 
         let spacing: usize = 0;
 
-        header_file.add_line(format!("    {0};", field.create_c_variable(spacing, c_standard)?));
+        header_file.add_line(&format!("    {0};", field.create_c_variable(spacing, c_standard)?));
 
         is_first = false;
     }
 
-    header_file.add_line(format!("}} {0}_t;", message_name));
+    header_file.add_line(&format!("}} {0}_t;", message_name));
     header_file.add_newline();
 
-    header_file.add_line(format!("extern const rune_descriptor_t {0}_descriptor;", message_name));
+    header_file.add_line(&format!("extern const rune_descriptor_t {0}_descriptor;", message_name));
     header_file.add_newline();
 
     Ok(sorted_field_list)
@@ -450,8 +455,8 @@ fn output_message_metadata(output_file: &mut OutputFile, configurations: &CConfi
     // 20 seems to be the number of fixed characters on the define string
     let define_size: usize = 20 + pascal_to_uppercase(&message_definition.name).len() + pascal_to_snake_case(&message_definition.name).len();
 
-    output_file.add_line("/** Initializes all values of the message, and subsequent sub-messages to 0 */".to_string());
-    output_file.add_line(format!(
+    output_file.add_line(&documentation_comment("Initializes all values of the message, and subsequent sub-messages to 0", 0));
+    output_file.add_line(&format!(
         "#define {0}_INIT ({1}_t) {{ {2}\\",
         pascal_to_uppercase(&message_definition.name),
         pascal_to_snake_case(&message_definition.name),
@@ -496,13 +501,13 @@ fn output_message_metadata(output_file: &mut OutputFile, configurations: &CConfi
             false => format!("    {0}{1} {2}\\", field.c_initializer(c_standard)?, comma, spaces(pre_newline))
         };
 
-        output_file.add_line(initializer_string);
+        output_file.add_line(&initializer_string);
     }
-    output_file.add_line("}".to_string());
+    output_file.add_line(&"}".to_string());
     output_file.add_newline();
 
-    output_file.add_line("/** Describes the message and all its fields, as is passed to encoding and decoding functions to indicate how to parse the message */".to_string());
-    output_file.add_line(format!(
+    output_file.add_line(&documentation_comment("Describes the message and all its fields, as is passed to encoding and decoding functions to indicate how to parse the message", 0));
+    output_file.add_line(&format!(
         "#define {0}_DESCRIPTOR &{1}_descriptor",
         pascal_to_uppercase(&message_definition.name),
         pascal_to_snake_case(&message_definition.name)
@@ -522,20 +527,15 @@ fn output_message_metadata(output_file: &mut OutputFile, configurations: &CConfi
         Ok(value) => value
     };
 
-    output_file.add_line("/** Most efficient encoded size of this message while retaining all data bytes. Rune encoders should generally aim for this as the maximum encoded size */".to_string());
-    output_file.add_line(format!("#define {0}_OPTIMAL_ENCODED_SIZE {1}", pascal_to_uppercase(&message_definition.name), optimal_encoded_size));
+    output_file.add_line(&documentation_comment("Most efficient encoded size of this message while retaining all data bytes. Rune encoders should generally aim for this as the maximum encoded size", 0));
+    output_file.add_line(&format!("#define {0}_OPTIMAL_ENCODED_SIZE {1}", pascal_to_uppercase(&message_definition.name), optimal_encoded_size));
     output_file.add_newline();
     if let Some(pessimal_encoded_size) = pessimal_encoded_size_option {
-        output_file.add_line(
-            "/** Most inefficient encoded size possible for this message. This should be used to allocate buffers when for the decoder if the encoder implementation is not known */".to_string()
-        );
-        output_file.add_line(format!("#define {0}_PESSIMAL_ENCODED_SIZE {1}", pascal_to_uppercase(&message_definition.name), pessimal_encoded_size));
+        output_file.add_line(&documentation_comment("Most inefficient encoded size possible for this message. This should be used to allocate buffers when for the decoder if the encoder implementation is not known", 0));
+        output_file.add_line(&format!("#define {0}_PESSIMAL_ENCODED_SIZE {1}", pascal_to_uppercase(&message_definition.name), pessimal_encoded_size));
         output_file.add_newline();
     } else {
-        output_file.add_line(
-            "/** A skipped message field in here or in a sub-message means that a pessimal encoded case cannot be calculated. This is because the size of the of the skipped field cannot be known */"
-                .to_string()
-        );
+        output_file.add_line(&documentation_comment("A skipped message field in here or in a sub-message means that a pessimal encoded case cannot be calculated. This is because the size of the of the skipped field cannot be known", 0));
         output_file.add_newline();
     }
 
@@ -547,12 +547,12 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
 
     // Print comment if present
     if let Some(comment) = &struct_definition.comment {
-        header_file.add_line(format!("/**{0}*/", comment))
+        header_file.add_line(&documentation_comment(comment, 0))
     }
 
     let struct_name: String = pascal_to_snake_case(&struct_definition.name);
 
-    header_file.add_line(format!("typedef struct {0}{1} {{", configurations.attributes.struct_attributes, struct_name));
+    header_file.add_line(&format!("typedef struct {0}{1} {{", configurations.attributes.struct_attributes, struct_name));
 
     // Sorted member list --> Then use sorted list instead of the one in the definition
     let sorted_member_list: Vec<StructMember> = struct_definition.index_sort_members()?;
@@ -566,17 +566,17 @@ fn output_struct(header_file: &mut OutputFile, configurations: &CConfigurations,
             if !is_first {
                 header_file.add_newline();
             }
-            header_file.add_line(format!("    /**{0}*/", member.comment.as_ref().unwrap()));
+            header_file.add_line(&documentation_comment(member.comment.as_ref().unwrap(), 4));
         }
 
         let spacing: usize = 0;
 
-        header_file.add_line(format!("    {0};", member.create_c_variable(spacing, c_standard)?));
+        header_file.add_line(&format!("    {0};", member.create_c_variable(spacing, c_standard)?));
 
         is_first = false;
     }
 
-    header_file.add_line(format!("}} {0}_t;", struct_name));
+    header_file.add_line(&format!("}} {0}_t;", struct_name));
     header_file.add_newline();
 
     Ok(sorted_member_list)
@@ -637,8 +637,8 @@ fn output_struct_metadata(output_file: &mut OutputFile, configurations: &CConfig
     // 20 seems to be the number of fixed characters on the define string
     let define_size: usize = 20 + pascal_to_uppercase(&struct_definition.name).len() + pascal_to_snake_case(&struct_definition.name).len();
 
-    output_file.add_line("/** Initializes all values of the message, and subsequent sub-messages to 0 */".to_string());
-    output_file.add_line(format!(
+    output_file.add_line(&documentation_comment("Initializes all values of the message, and subsequent sub-messages to 0", 0));
+    output_file.add_line(&format!(
         "#define {0}_INIT ({1}_t) {{ {2}\\",
         pascal_to_uppercase(&struct_definition.name),
         pascal_to_snake_case(&struct_definition.name),
@@ -683,9 +683,9 @@ fn output_struct_metadata(output_file: &mut OutputFile, configurations: &CConfig
             false => format!("    {0}{1} {2}\\", member.c_initializer(c_standard)?, comma, spaces(pre_newline))
         };
 
-        output_file.add_line(initializer_string);
+        output_file.add_line(&initializer_string);
     }
-    output_file.add_line("}".to_string());
+    output_file.add_line(&"}".to_string());
     output_file.add_newline();
 
     Ok(())
@@ -698,19 +698,13 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     //
     // · Compiler version (C23 compliant)
     //
-    // GCC 13 or higher
-    // CLang 8.0 or higher
-    //
     // · Include & C++ guards
     //
     // · standard includes
     //
-    // <stdbool.h>
-    // <stdint.h>
-    //
     // —————————————————————————————————————————————————
 
-    let c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
+    let _c_standard: &CStandard = &configurations.compiler_configurations.c_standard;
 
     let h_file_string: String = format!(
         "{0}{1}.rune.h",
@@ -731,41 +725,26 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // Start & C++ guards
     // ———————————————————
 
-    header_file.add_line(format!("#ifndef {0}_RUNE_H", file.name.to_uppercase()));
-    header_file.add_line(format!("#define {0}_RUNE_H", file.name.to_uppercase()));
+    header_file.add_line(&format!("#ifndef {0}_RUNE_H", file.name.to_uppercase()));
+    header_file.add_line(&format!("#define {0}_RUNE_H", file.name.to_uppercase()));
     header_file.add_newline();
 
-    header_file.add_line("#ifdef __cplusplus".to_string());
-    header_file.add_line("extern \"C\" {".to_string());
-    header_file.add_line("#endif /* __cplusplus */".to_string());
+    header_file.add_line(&"#ifdef __cplusplus".to_string());
+    header_file.add_line(&"extern \"C\" {".to_string());
+    header_file.add_line(&"#endif // __cplusplus".to_string());
     header_file.add_newline();
 
     // File inclusions
     // ————————————————
 
-    // Standard library bool (if standard allows it)
-    if c_standard.allows_boolean() {
-        header_file.add_line("#include <stdbool.h>".to_string());
-    }
-
-    // Standard library integers (if standard allows it)
-    if c_standard.allows_integer_types() {
-        header_file.add_line("#include <stdint.h>".to_string());
-    }
-
-    // If either type was allowed, then add a newline
-    if c_standard.allows_boolean() || c_standard.allows_integer_types() {
-        header_file.add_newline();
-    }
-
     // Include Runic Definitions
-    header_file.add_line("#include \"rune.h\"".to_string());
+    header_file.add_line(&"#include \"rune.h\"".to_string());
     header_file.add_newline();
 
     if !file.definitions.includes.is_empty() {
         // Print out includes
         for include_definition in &file.definitions.includes {
-            header_file.add_line(format!("#include \"{0}.rune.h\"", include_definition.file));
+            header_file.add_line(&format!("#include \"{0}.rune.h\"", include_definition.file));
         }
 
         // Separation line
@@ -793,8 +772,31 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // Bitfields
     // ——————————
 
-    for bitfield_definition in &file.definitions.bitfields {
-        output_bitfield(&mut header_file, configurations, bitfield_definition)?;
+    // Check that we can either use C23 or GNU extensions, otherwise we cannot output bitfields
+    if !file.definitions.bitfields.is_empty() {
+        let standard: &CStandard = &configurations.compiler_configurations.c_standard;
+        let strict: bool         = configurations.compiler_configurations.strict;
+
+        // C23 + strict = OK
+        // C11 + GNU (endianness check) = OK
+        // Older = Not ok, even with GNU as we need static assertions
+
+        // If the C standard used is older than C23, and we have the 'strict' flag set, then we cannot support bitfields, as we require endianness check
+        if !standard.allows_endianness_check() && strict {
+            error!("Cannot guarantee bitfield order before C23 standard if using 'strict' flag due to lack of endianness checks! Thus they are not allowed if using {0} with a 'strict' flag", standard.to_string());
+            return Err(CompilerError::SourceAndCStandardMismatch)
+        }
+
+        // Given the previous check guarantees that we either have C23 or GNU extensions.
+        // If the guarantee is that we have GNU extensions, then we need to check if we have at least C11 otherwise we cannot do static assertions
+        if !standard.allows_static_assertions() {
+            error!("Cannot guarantee bitfield order before C11 standard due to lack of static assertions! Thus they are not allowed if using {0}", standard.to_string());
+            return Err(CompilerError::SourceAndCStandardMismatch)
+        }
+
+        for bitfield_definition in &file.definitions.bitfields {
+            output_bitfield(&mut header_file, configurations, bitfield_definition)?;
+        }
     }
 
     // Structs
@@ -824,12 +826,12 @@ pub fn output_header(file: &RuneFileDescription, configurations: &CConfiguration
     // End & C++ guards
     // —————————————————
 
-    header_file.add_line("#ifdef __cplusplus".to_string());
-    header_file.add_line("}".to_string());
-    header_file.add_line("#endif /* __cplusplus */".to_string());
+    header_file.add_line(&"#ifdef __cplusplus".to_string());
+    header_file.add_line(&"}".to_string());
+    header_file.add_line(&"#endif // __cplusplus".to_string());
     header_file.add_newline();
 
-    header_file.add_line(format!("#endif /* {0}_RUNE_H */", file.name.to_uppercase()));
+    header_file.add_line(&format!("#endif // {0}_RUNE_H", file.name.to_uppercase()));
 
     // Output file
     // ————————————

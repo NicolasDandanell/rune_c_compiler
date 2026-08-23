@@ -1,17 +1,20 @@
+use std::ops::Index;
+
 use rune_parser::scanner::NumericLiteral;
 
 // String helper functions
 // ————————————————————————
 
-/// Output the amount of ' ' spaces
-pub fn spaces(amount: usize) -> String {
-    let mut spaces = String::with_capacity(0x40);
+pub fn documentation_comment(comment: &str, offset: usize) -> String {
+    let initial_space: &str = match comment.chars().nth(0) {
+        Some(char) => match char {
+            ' ' => "",
+            _   => " "
+        },
+        None => " "
+    };
 
-    for _ in 0..amount {
-        spaces.push(' ');
-    }
-
-    spaces
+    format!("{0}///{1}{2}", spaces(offset), initial_space, comment)
 }
 
 /// Convert NamedVariable to named_variable
@@ -46,6 +49,13 @@ pub fn pascal_to_uppercase(pascal: &str) -> String {
     }
 
     uppecase
+}
+
+/// Output the amount of ' ' spaces
+pub fn spaces(amount: usize) -> String {
+    const SPACES: [char; 0x100] = [' '; 0x100];
+
+    SPACES[0 .. amount as usize].iter().collect()
 }
 
 // Numeric value helper functions

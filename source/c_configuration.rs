@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use rune_parser::RuneFileDescription;
 
-use crate::{c_utilities::CMessageDefinition, compile_error::CompilerError, output::*};
+use crate::{c_utilities::CMessageDefinition, compile_error::CompilerError::{self, MalformedSource}, output::*};
 
 // Architecture
 // —————————————
@@ -71,6 +71,62 @@ impl CStandard {
         String::from("C89/C90, C95, C99, C11, C17, C23")
     }
 
+    pub fn null_string(&self) -> &str {
+        match *self >= CStandard::C23 {
+            true  => &"nullptr",
+            false => &"NULL"
+        }
+    }
+
+    pub fn bool_string(&self) -> &str {
+        match *self >= CStandard::C99 {
+            true  => &"bool",
+            false => &"char"
+        }
+    }
+
+    pub fn true_string(&self) -> &str {
+        match *self >= CStandard::C99 {
+            true  => &"true",
+            false => &"1"
+        }
+    }
+
+    pub fn false_string(&self) -> &str {
+        match *self >= CStandard::C99 {
+            true  => &"false",
+            false => &"0"
+        }
+    }
+
+    pub fn little_endian_check(&self, strict: bool) -> Result<String, CompilerError> {
+        match *self {
+            CStandard::C23 => Ok(String::from("__STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_LITTLE__")),
+            _ => match strict {
+                false => Ok(String::from("__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__")),
+                true  => Err(CompilerError::SourceAndCStandardMismatch)
+            }
+        }
+    }
+
+    pub fn big_endian_check(&self, strict: bool) -> Result<String, CompilerError> {
+        match *self {
+            CStandard::C23 => Ok(String::from("__STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_BIG__")),
+            _ => match strict {
+                false => Ok(String::from("__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__")),
+                true  => Err(CompilerError::SourceAndCStandardMismatch)
+            }
+        }
+    }
+
+    pub fn static_assert(&self) -> Result<String, CompilerError> {
+        match *self {
+            CStandard::C11 => Ok(String::from("_Static_assert")),
+            CStandard::C23 => Ok(String::from("static_assert")),
+            _ => Err(CompilerError::SourceAndCStandardMismatch)
+        }
+    }
+
     // C99
     // ————
 
@@ -94,10 +150,33 @@ impl CStandard {
         *self >= CStandard::C99
     }
 
+    // C11
+    // ————
+
+    pub fn allows_static_assertions(&self) -> bool {
+        *self >= CStandard::C11
+    }
+
     // C23
     // ————
 
     pub fn allows_enum_backing_type(&self) -> bool {
+        *self >= CStandard::C23
+    }
+
+    pub fn allows_nullptr(&self) -> bool {
+        *self >= CStandard::C23
+    }
+
+    pub fn allows_binary_literals(&self) -> bool {
+        *self >= CStandard::C23
+    }
+
+    pub fn has_builtin_boolean(&self) -> bool {
+        *self >= CStandard::C23
+    }
+
+    pub fn allows_endianness_check(&self) -> bool{
         *self >= CStandard::C23
     }
 }
@@ -136,7 +215,10 @@ pub struct CompileConfigurations {
     pub sort: bool,
 
     /// Specifies which C standard the output source should comply with
-    pub c_standard: CStandard
+    pub c_standard: CStandard,
+
+    /// Specifies if GNU extensions and other common compiler features are allowed
+    pub strict: bool
 }
 
 pub struct AttributeStrings {
@@ -219,7 +301,7 @@ impl CConfigurations {
         // Parse attribute strings
         // ————————————————————————
 
-        let attributes = parse_attributes(configurations);
+        let attributes = parse_attributes(configurations)?;
 
         Ok(CConfigurations {
             compiler_configurations: configurations.clone(),
@@ -233,104 +315,127 @@ impl CConfigurations {
     }
 }
 
-fn parse_attributes(configurations: &CompileConfigurations) -> AttributeStrings {
-    let mut bitfield_attribute_list: String = String::with_capacity(0x100);
-    let enum_attribute_list: String = String::with_capacity(0x100);
-    let mut message_attribute_list: String = String::with_capacity(0x100);
-    let mut metadata_attribute_list: String = String::with_capacity(0x100);
-    let mut descriptor_attribute_list: String = String::with_capacity(0x100);
-    let mut struct_attribute_list: String = String::with_capacity(0x100);
+enum CAttributes {
+    PACKED,
+    SECTION(String),
+}
+
+impl CAttributes {
+    fn string(&self, standard: &CStandard) -> String {
+        match self {
+            CAttributes::PACKED => match standard {
+                CStandard::C23 => String::from("gnu::packed"),
+                _ => String::from("packed")
+            },
+            CAttributes::SECTION(string) => match standard {
+                CStandard::C23 => format!("gnu::section(\"{string}\")"),
+                _ => format!("section(\"{string}\")")
+            }
+        }
+    }
+
+    fn print_attribute_list(list: &Vec<CAttributes>, configurations: &CompileConfigurations) -> Result<String, CompilerError> {
+        if list.is_empty() {
+            return Ok(String::new())
+        }
+
+        if configurations.strict {
+            return Err(CompilerError::SourceAndCStandardMismatch)
+        }
+
+        let mut output_string: String = String::with_capacity(0x40);
+
+        // Start of attribute list
+        match configurations.c_standard {
+            CStandard::C23 => output_string.push_str("[["),
+            _ => output_string.push_str("__attribute__((")
+        }
+
+        for (index, attribute) in list.iter().enumerate() {
+            if index != 0 {
+                output_string.push_str(", ");
+            }
+
+            output_string.push_str(&attribute.string(&configurations.c_standard));
+        }
+
+        match configurations.c_standard {
+            CStandard::C23 => output_string.push_str("]] "),
+            _ => output_string.push_str(")) ")
+        }
+
+        Ok(output_string)
+    }
+}
+
+fn parse_attributes(configurations: &CompileConfigurations) -> Result<AttributeStrings, CompilerError> {
+    // Check that the attribute related flags have not been combined with the 'strict' flag
+    // —————————————————————————————————————————————————————————————————————————————————————
+
+    if configurations.strict && configurations.pack_data {
+        error!("Cannot combine 'strict' and 'pack_data' flags, as the \"packed\" attribute is a GNU extension");
+        return Err(CompilerError::SourceAndCStandardMismatch)
+    }
+
+    if configurations.strict && configurations.pack_metadata {
+        error!("Cannot combine 'strict' and 'pack_metadata' flags, as the \"packed\" attribute is a GNU extension");
+        return Err(CompilerError::SourceAndCStandardMismatch)
+    }
+
+    if configurations.strict && configurations.section.is_some() {
+        error!("Cannot combine 'strict' and 'data_section' flags, as the \"section\" attribute is a GNU extension");
+        return Err(CompilerError::SourceAndCStandardMismatch)
+    }
+
+    // Declare attribute lists
+    // ————————————————————————
+
+    let mut bitfield_attribute_list: Vec<CAttributes>   = Vec::with_capacity(2);
+    let enum_attribute_list: Vec<CAttributes>           = Vec::with_capacity(2);
+    let mut message_attribute_list: Vec<CAttributes>    = Vec::with_capacity(2);
+    let mut metadata_attribute_list: Vec<CAttributes>   = Vec::with_capacity(2);
+    let mut descriptor_attribute_list: Vec<CAttributes> = Vec::with_capacity(2);
+    let mut struct_attribute_list: Vec<CAttributes>     = Vec::with_capacity(2);
+
 
     // Parse "packed" attribute
     // —————————————————————————
 
-    // Bitfields are always packed!
-    match bitfield_attribute_list.is_empty() {
-        true => bitfield_attribute_list.push_str("packed"),
-        false => bitfield_attribute_list.push_str(", packed")
-    }
-
-    // Structs are always packed!
-    match struct_attribute_list.is_empty() {
-        true => struct_attribute_list.push_str("packed"),
-        false => struct_attribute_list.push_str(", packed")
-    }
-
-    // Enums have backing types, and do not need to be packed
-
     if configurations.pack_data {
-        // Parser
-        match descriptor_attribute_list.is_empty() {
-            true => descriptor_attribute_list.push_str("packed"),
-            false => descriptor_attribute_list.push_str(", packed")
-        }
+        // Bitfields
+        bitfield_attribute_list.push(CAttributes::PACKED);
+
+        // Enums have backing types, and do not need to be packed
 
         // Messages
-        match message_attribute_list.is_empty() {
-            true => message_attribute_list.push_str("packed"),
-            false => message_attribute_list.push_str(", packed")
-        }
+        message_attribute_list.push(CAttributes::PACKED);
+
+        // Structs
+        struct_attribute_list.push(CAttributes::PACKED);
     }
 
     if configurations.pack_metadata {
-        match metadata_attribute_list.is_empty() {
-            true => metadata_attribute_list.push_str("packed"),
-            false => metadata_attribute_list.push_str(", packed")
-        }
+        metadata_attribute_list.push(CAttributes::PACKED);
     }
 
     // Parse "section" attribute
     // ——————————————————————————
 
     if configurations.section.is_some() {
-        let section_name: String = configurations.section.clone().unwrap();
-
-        // Descriptor
-        match descriptor_attribute_list.is_empty() {
-            true => descriptor_attribute_list.push_str(format!("section(\"{0}\")", section_name).as_str()),
-            false => descriptor_attribute_list.push_str(format!(", section(\"{0}\")", section_name).as_str())
-        }
+        // Message Descriptor
+        descriptor_attribute_list.push(CAttributes::SECTION(configurations.section.clone().unwrap()));
     }
 
     // Create attribute strings
     // —————————————————————————
 
-    // Runic bitfields must ALWAYS be packed, so this will never be empty
-    let bitfield_attributes: String = format!("__attribute__(({0})) ", bitfield_attribute_list);
 
-    // Enums
-    let enum_attributes: String = match enum_attribute_list.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0})) ", enum_attribute_list)
-    };
-
-    // Messages
-    let message_attributes: String = match message_attribute_list.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0})) ", message_attribute_list)
-    };
-
-    // Descriptor
-    let descriptor_attributes: String = match descriptor_attribute_list.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0})) ", descriptor_attribute_list)
-    };
-
-    // Structs
-    let struct_attributes: String = format!("__attribute__(({0})) ", struct_attribute_list);
-
-    // Metadata
-    let metadata_attributes: String = match metadata_attribute_list.is_empty() {
-        true => String::new(),
-        false => format!("__attribute__(({0})) ", metadata_attribute_list)
-    };
-
-    AttributeStrings {
-        bitfield_attributes,
-        enum_attributes,
-        message_attributes,
-        metadata_attributes,
-        descriptor_attributes,
-        struct_attributes
-    }
+    Ok(AttributeStrings {
+        bitfield_attributes:   CAttributes::print_attribute_list(&bitfield_attribute_list, configurations)?,
+        enum_attributes:       CAttributes::print_attribute_list(&enum_attribute_list, configurations)?,
+        message_attributes:    CAttributes::print_attribute_list(&message_attribute_list, configurations)?,
+        metadata_attributes:   CAttributes::print_attribute_list(&metadata_attribute_list, configurations)?,
+        descriptor_attributes: CAttributes::print_attribute_list(&descriptor_attribute_list, configurations)?,
+        struct_attributes:     CAttributes::print_attribute_list(&struct_attribute_list, configurations)?
+    })
 }

@@ -56,12 +56,16 @@ struct Args {
     unsorted: bool,
 
     /// Whether the program should avoid printing any output at all
-    #[arg(long, short = 's', default_value = "false")]
-    silent: bool,
+    #[arg(long, short = 'q', default_value = "false")]
+    quiet: bool,
 
     /// Specifies which C standard the output source should comply with - Defaults to C23
     #[arg(long, short = 'c', default_value = "C23")]
     c_standard: String,
+
+    /// Specifies whether the C standard should be strictly adhered to, disabling common compiler features such as GNU extensions
+    #[arg(long, short = 's', default_value = "false")]
+    strict: bool,
 
     /// Whether to run the compiler in debug mode, which has significantly increases the number of output messages
     #[arg(long, default_value = "false")]
@@ -74,9 +78,9 @@ fn main() -> Result<(), CompilerError> {
 
     let args: Args = Args::parse();
 
-    // Disable print output if silent argument was passed
-    if args.silent {
-        enable_silent();
+    // Disable print output if quiet argument was passed
+    if args.quiet {
+        enable_quiet();
     };
 
     // Enable debug messages
@@ -106,6 +110,7 @@ fn main() -> Result<(), CompilerError> {
     let configurations: CompileConfigurations = CompileConfigurations {
         architecture:  Architecture::from_value(args.architecture)?,
         c_standard:    CStandard::from_string(&args.c_standard)?,
+        strict:        args.strict,
         pack_data:     args.pack_data,
         pack_metadata: args.pack_metadata,
         section:       args.data_section,
