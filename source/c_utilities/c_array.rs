@@ -1,8 +1,8 @@
 use rune_parser::types::{Array, ArrayType, Primitive, UserDefinitionLink};
 
 use crate::{
-    CStandard, CompilerError,
-    c_utilities::{CPrimitive, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    CompilerError,
+    c_utilities::{CPrimitive, CStandard, CStructDefinition, pascal_to_snake_case, pascal_to_uppercase, spaces},
     output::*
 };
 

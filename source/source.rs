@@ -1,12 +1,6 @@
 use std::path::Path;
 
-use crate::{
-    RuneFileDescription,
-    c_configuration::CConfigurations,
-    c_utilities::CMessageDescriptor,
-    compile_error::CompilerError,
-    output_file::OutputFile
-};
+use crate::{RuneFileDescription, c_configuration::CConfigurations, c_utilities::CMessageDescriptor, compile_error::CompilerError, output_file::OutputFile};
 
 pub fn output_source(file: &RuneFileDescription, configurations: &CConfigurations, output_path: &Path) -> Result<(), CompilerError> {
     let c_file_string: String = format!(

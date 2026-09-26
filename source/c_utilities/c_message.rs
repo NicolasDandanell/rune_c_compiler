@@ -4,8 +4,8 @@ use rune_parser::{
 };
 
 use crate::{
-    c_configuration::{Architecture, CStandard, CompileConfigurations},
-    c_utilities::{CArray, CPrimitive, CStructMember, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    c_configuration::{Architecture, CompileConfigurations},
+    c_utilities::{CArray, CPrimitive, CStandard, CStructMember, pascal_to_snake_case, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*
 };

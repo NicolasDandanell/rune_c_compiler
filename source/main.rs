@@ -16,7 +16,8 @@ use clap::Parser;
 use rune_parser::{RuneFileDescription, parser_rune_files};
 
 use crate::{
-    c_configuration::{Architecture, CConfigurations, CStandard, CompileConfigurations},
+    c_configuration::{Architecture, CConfigurations, CompileConfigurations},
+    c_utilities::CStandard,
     compile_error::CompilerError,
     header::output_header,
     output::*,
@@ -28,7 +29,7 @@ use crate::{
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path of folder where to find Rune files (subfolders will also be searched). Can be passed multiple times if files are spread over multiple different directories.
-    #[arg(long, short = 'i')]
+    #[arg(long, short = 'i', required = true)]
     input_folder: Vec<String>,
 
     /// Path of folder where to output source code
@@ -145,10 +146,6 @@ fn main() -> Result<(), CompilerError> {
 pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: &Path, configurations: CompileConfigurations) -> Result<(), CompilerError> {
     let c_configurations: CConfigurations = CConfigurations::parse(&file_descriptions, &configurations)?;
 
-    // Create runic definitions file
-    info!("Outputting runic definitions");
-    output_runic_definitions(&file_descriptions, &c_configurations, output_path)?;
-
     // Create source and header files matching the Rune files
     info!("Outputting headers and sources for:");
     for file in &file_descriptions {
@@ -160,6 +157,10 @@ pub fn output_c_files(file_descriptions: Vec<RuneFileDescription>, output_path: 
         // Create source file
         output_source(file, &c_configurations, output_path)?;
     }
+
+    // Create runic definitions file
+    info!("Outputting runic definitions");
+    output_runic_definitions(&file_descriptions, &c_configurations, output_path)?;
 
     info!("Rune C compiler is done!");
     Ok(())

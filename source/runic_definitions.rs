@@ -6,8 +6,8 @@ use rune_parser::{
 };
 
 use crate::{
-    c_configuration::{CConfigurations, CStandard},
-    c_utilities::CPrimitive,
+    c_configuration::CConfigurations,
+    c_utilities::{CPrimitive, CStandard},
     compile_error::CompilerError,
     output::*,
     output_file::OutputFile

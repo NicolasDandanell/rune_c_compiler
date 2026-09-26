@@ -1,7 +1,10 @@
 use rune_parser::types::{FieldIndex, FieldType, MessageDefinition, MessageField, UserDefinitionLink};
 
 use crate::{
-    c_configuration::CompileConfigurations, c_utilities::{CMessageDefinition, CMessageField, pascal_to_snake_case, spaces}, compile_error::CompilerError, output_file::OutputFile
+    c_configuration::CompileConfigurations,
+    c_utilities::{CMessageDefinition, CMessageField, pascal_to_snake_case, spaces},
+    compile_error::CompilerError,
+    output_file::OutputFile
 };
 
 pub struct CMessageDescriptor {
@@ -27,7 +30,7 @@ impl CMessageDescriptor {
         }
 
         Ok(CMessageDescriptor {
-            name:   pascal_to_snake_case(&message.name),
+            name: pascal_to_snake_case(&message.name),
             fields,
             descriptor_flags,
             descriptor_list
@@ -36,7 +39,7 @@ impl CMessageDescriptor {
 
     fn member_string(&self, name: &str, value: &str, offset: usize, name_alignment: Option<usize>, comma: bool, configurations: &CompileConfigurations) -> String {
         let comma_string: &str = match comma {
-            true  => ",",
+            true => ",",
             false => ""
         };
 
@@ -54,7 +57,7 @@ impl CMessageDescriptor {
         output_string
     }
 
-    fn field_string(&self, field: &MessageField,  offset: usize, spacing: usize, configurations: &CompileConfigurations) -> Result<String, CompilerError> {
+    fn field_string(&self, field: &MessageField, offset: usize, spacing: usize, configurations: &CompileConfigurations) -> Result<String, CompilerError> {
         let verifier_string: &str = match field.index {
             FieldIndex::Verifier => " (Verifier)",
             _ => ""
@@ -75,11 +78,12 @@ impl CMessageDescriptor {
         let size_string: String = self.member_string("size", size_value, offset + spacing, Some("offset".len()), false, configurations);
 
         let comma: &str = match self.fields.len() - 1 == field.index.value() as usize {
-            true  => "",
+            true => "",
             false => ","
         };
 
-        Ok(format!("{0}{{ // {1}: {2}{3}\n{4}\n{5}\n{0}}}{6}",
+        Ok(format!(
+            "{0}{{ // {1}: {2}{3}\n{4}\n{5}\n{0}}}{6}",
             spaces(offset),
             field.index.value(),
             field.identifier,
@@ -90,7 +94,7 @@ impl CMessageDescriptor {
         ))
     }
 
-    pub fn output_field_descriptors(&self, source_file : &mut OutputFile) {
+    pub fn output_field_descriptors(&self, source_file: &mut OutputFile) {
         // Output field descriptors (if any)
         if !self.descriptor_list.is_empty() {
             source_file.add_line(&format!("const rune_descriptor_t* {0}_field_descriptors[{1}] = {{", self.name, self.descriptor_list.len()));
@@ -108,7 +112,7 @@ impl CMessageDescriptor {
         }
     }
 
-    pub fn output(&self, configurations: &CompileConfigurations, descriptor_attributes: &String, source_file : &mut OutputFile) -> Result<(), CompilerError> {
+    pub fn output(&self, configurations: &CompileConfigurations, descriptor_attributes: &String, source_file: &mut OutputFile) -> Result<(), CompilerError> {
         let offset: usize = 4;
         let spacing: usize = 4;
 
@@ -120,7 +124,7 @@ impl CMessageDescriptor {
         // Field descriptors
         let field_descriptors: &str = match self.descriptor_flags == 0 {
             false => &format!("{0}_field_descriptors", self.name),
-            true  => configurations.c_standard.null_string()
+            true => configurations.c_standard.null_string()
         };
 
         source_file.add_line(&self.member_string("field_descriptors", &field_descriptors, offset, longest_field, true, &configurations));
@@ -128,7 +132,7 @@ impl CMessageDescriptor {
         // Descriptor flags
         let descriptor_flags: &str = match configurations.c_standard.allows_binary_literals() {
             false => &format!("0x{0:08X}", self.descriptor_flags),
-            true  => &format!("0b{0:0fields$b}", self.descriptor_flags as usize, fields = self.fields.len())
+            true => &format!("0b{0:0fields$b}", self.descriptor_flags as usize, fields = self.fields.len())
         };
 
         source_file.add_line(&self.member_string("descriptor_flags", descriptor_flags, offset, longest_field, true, &configurations));
