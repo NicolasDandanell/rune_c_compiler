@@ -1,6 +1,10 @@
 use rune_parser::types::Primitive;
 
-use crate::{CStandard, CompilerError, c_utilities::spaces, output::*};
+use crate::{
+    CompilerError,
+    c_utilities::{CStandard, spaces},
+    output::*
+};
 
 // Primitive methods
 // ——————————————————

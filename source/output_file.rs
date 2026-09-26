@@ -27,7 +27,7 @@ impl OutputFile {
         }
     }
 
-    pub fn add_line(&mut self, string: String) {
+    pub fn add_line(&mut self, string: &String) {
         self.string_buffer.push_str(format!("{0}\n", string).as_str());
     }
 

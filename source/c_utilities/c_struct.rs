@@ -1,8 +1,7 @@
 use rune_parser::types::{MemberType, StructDefinition, StructMember, UserDefinitionLink};
 
 use crate::{
-    c_configuration::CStandard,
-    c_utilities::{CArray, CPrimitive, pascal_to_snake_case, pascal_to_uppercase, spaces},
+    c_utilities::{CArray, CPrimitive, CStandard, pascal_to_snake_case, pascal_to_uppercase, spaces},
     compile_error::CompilerError,
     output::*
 };
@@ -57,6 +56,7 @@ impl CStructMember for StructMember {
 pub trait CStructDefinition {
     fn c_size(&self) -> Result<u64, CompilerError>;
     fn index_sort_members(&self) -> Result<Vec<StructMember>, CompilerError>;
+    fn size_assertion(&self, c_standard: &CStandard) -> Result<String, CompilerError>;
 }
 
 impl CStructDefinition for StructDefinition {
@@ -94,5 +94,13 @@ impl CStructDefinition for StructDefinition {
         }
 
         Ok(sorted_members)
+    }
+
+    fn size_assertion(&self, c_standard: &CStandard) -> Result<String, CompilerError> {
+        let condition: String = format!("sizeof({0}_t) == {1}", pascal_to_snake_case(&self.name), self.c_size()?);
+
+        let mut message: String = format!("{0}_t did not have the expected size of {1}!", pascal_to_snake_case(&self.name), self.c_size()?);
+
+        Ok(c_standard.static_assertion(&condition, &mut message)?)
     }
 }
